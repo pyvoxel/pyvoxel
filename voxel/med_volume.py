@@ -8,7 +8,7 @@ import warnings
 from copy import deepcopy
 from mmap import mmap
 from numbers import Number
-from typing import Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Sequence, Tuple, Union
 
 import nibabel as nib
 import numpy as np
@@ -27,7 +27,6 @@ if env.sitk_available():
 if env.cupy_available():
     import cupy as cp
 if env.package_available("h5py"):
-    from typing import TYPE_CHECKING
 
     import h5py
 
