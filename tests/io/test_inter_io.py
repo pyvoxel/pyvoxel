@@ -22,7 +22,7 @@ class TestInterIO(unittest.TestCase):
 
     @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
     def test_dcm_nifti_load(self):
-        """Verify that volumes loaded from nifti or dicom are identical"""
+        """Verify that volumes loaded from nifti or dicom are identical."""
         for dp_ind, dp in enumerate(ututils.SCAN_DIRPATHS):
             curr_scan = ututils.SCANS[dp_ind]
             curr_scan_info = ututils.SCANS_INFO[curr_scan]  # noqa

@@ -1,5 +1,4 @@
-"""Logging utility.
-"""
+"""Logging utility."""
 
 import atexit
 import functools
@@ -17,8 +16,8 @@ __all__ = ["setup_logger"]
 
 
 class _ColorfulFormatter(logging.Formatter):
-    """
-    This class is adapted from Facebook's detectron2:
+    """This class is adapted from Facebook's detectron2:
+
     https://github.com/facebookresearch/detectron2/blob/master/detectron2/utils/logger.py
     """
 

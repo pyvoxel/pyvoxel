@@ -1,5 +1,4 @@
-"""List of numpy functions supported for MedicalVolumes.
-"""
+"""List of numpy functions supported for MedicalVolumes."""
 import warnings
 from typing import Sequence, Union
 

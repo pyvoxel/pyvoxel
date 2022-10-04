@@ -2,12 +2,14 @@ autoformat:
 	set -e
 	isort .
 	black --config pyproject.toml .
+	docformatter --config pyproject.toml -r --in-place .
 	flake8
 
 lint:
 	set -e
 	isort -c .
 	black --check --config pyproject.toml .
+	docformatter --config pyproject.toml -r --check .
 	flake8
 
 test:

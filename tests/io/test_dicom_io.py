@@ -23,8 +23,9 @@ class TestDicomIO(ututils.TempPathMixin):
 
     @staticmethod
     def are_equivalent_headers(h1, h2):
-        """
-        Check if two headers are identical. Adapted from
+        """Check if two headers are identical.
+
+        Adapted from
         https://pydicom.github.io/pydicom/stable/auto_examples/plot_dicom_difference.html
         """
         # try:
