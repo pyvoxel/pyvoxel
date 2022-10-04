@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8"]
+        python-version: ["3.7", "3.8", "3.9"]
                 
     steps:
       - uses: actions/checkout@v2
@@ -72,7 +72,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.6", "3.7", "3.8"]  # there are some issues with numpy multiarray in 3.7
+        python-version: ["3.7", "3.8", "3.9"]  # there are some issues with numpy multiarray in 3.7
                 
     steps:
       - uses: actions/checkout@v2
