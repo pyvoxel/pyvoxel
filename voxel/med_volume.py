@@ -1249,7 +1249,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                     _slice_headers.append(0)
                 else:
                     _slice_headers.append(x)
-            headers = headers[_slice_headers]
+            headers = headers[tuple(_slice_headers)]
 
         affine = slicer.slice_affine(_slice)
         return self._partial_clone(volume=volume, affine=affine, headers=headers)

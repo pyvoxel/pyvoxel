@@ -107,6 +107,11 @@ EXTRAS = {
         "isort",
         "black==22.8.0",
         "click==8.0.2",
+        # testing.
+        "pytest-cov>=2.10.1",
+        "pre-commit>=2.9.3",
+        # upload.
+        "twine",
     ],
     "docs": ["mistune>=0.8.1,<2.0.0", "sphinx", "sphinxcontrib.bibtex", "m2r2"],
 }
