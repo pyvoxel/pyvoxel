@@ -1,13 +1,12 @@
 """Voxel."""
-from voxel.utils.collect_env import collect_env_info  # noqa
-
-from voxel.med_volume import MedicalVolume  # noqa: F401
+from voxel.device import Device, cpu_device, get_array_module, get_device, to_device  # noqa: F401
+from voxel.io import load, read, save, write  # noqa: F401
 from voxel.io.dicom import DicomReader, DicomWriter  # noqa: F401
-from voxel.io.nifti import NiftiReader, NiftiWriter  # noqa: F401
-from voxel.io import read, save, load, write  # noqa: F401
 from voxel.io.format_io import ImageDataFormat  # noqa: F401
-from voxel.device import Device, get_device, to_device, cpu_device, get_array_module  # noqa: F401
+from voxel.io.nifti import NiftiReader, NiftiWriter  # noqa: F401
+from voxel.med_volume import MedicalVolume  # noqa: F401
 from voxel.orientation import to_affine  # noqa: F401
+from voxel.utils.collect_env import collect_env_info  # noqa
 
 from .config import config  # noqa: F401
 

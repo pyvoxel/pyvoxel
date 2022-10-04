@@ -3,6 +3,7 @@
 This module defines :class:`MedicalVolume`, which is a wrapper for nD volumes.
 """
 from __future__ import annotations
+
 import warnings
 from copy import deepcopy
 from mmap import mmap

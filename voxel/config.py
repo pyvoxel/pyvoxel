@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import os
-import yaml
 from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 CONFIG_ENV_VARIABLE = "VOXEL_CONFIG"
 

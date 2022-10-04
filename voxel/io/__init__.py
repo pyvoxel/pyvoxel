@@ -2,14 +2,14 @@
 import os
 from pathlib import Path
 from typing import List, Union
-from voxel.io import dicom, nifti  # noqa: F401
 
+from voxel.io import dicom, nifti  # noqa: F401
 from voxel.io.dicom import *  # noqa
-from voxel.io.format_io import ImageDataFormat  # noqa
 from voxel.io.dicom import DicomReader, DicomWriter
-from voxel.io.nifti import NiftiReader, NiftiWriter
-from voxel.io.nifti import *  # noqa
+from voxel.io.format_io import ImageDataFormat  # noqa
 from voxel.io.format_io import DataReader, DataWriter
+from voxel.io.nifti import *  # noqa
+from voxel.io.nifti import NiftiReader, NiftiWriter
 from voxel.med_volume import MedicalVolume
 
 __all__ = [
