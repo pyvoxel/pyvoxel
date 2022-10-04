@@ -1,0 +1,31 @@
+# project files
+**/.idea
+**/.vscode
+
+# cache files
+**/__pycache__
+**/.pytest_cache
+*.pyc
+**/temp
+
+# build files
+*.egg-info
+build/
+**/dist
+*.spec
+
+# ignore runtime generated package scripts
+**/._*
+
+# Generated docs
+docs/source/generated
+
+# coverage files
+.coverage
+coverage.xml
+
+# log files
+**/.voxel
+
+# data
+unittest-data/

@@ -1,0 +1,7 @@
+[run]
+omit =
+    *test*
+
+[report]
+include =
+    voxel/*

@@ -1,8 +1,8 @@
-# DOSMA: Deep Open-Source Medical Image Analysis
+# Voxel
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/ad12/DOSMA/CI)
-[![codecov](https://codecov.io/gh/ad12/DOSMA/branch/master/graph/badge.svg?token=X2FRQJHV2M)](https://codecov.io/gh/ad12/DOSMA)
-[![Documentation Status](https://readthedocs.org/projects/dosma/badge/?version=latest)](https://dosma.readthedocs.io/en/latest/?badge=latest)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/voxelimaging/pyvoxel/CI)
+[![codecov](https://codecov.io/gh/voxelimaging/pyvoxel/branch/master/graph/badge.svg?token=X2FRQJHV2M)](https://codecov.io/gh/voxelimaging/pyvoxel)
+<!-- [![Documentation Status](https://readthedocs.org/projects/dosma/badge/?version=latest)](https://dosma.readthedocs.io/en/latest/?badge=latest) -->
 
 [Documentation](http://dosma.readthedocs.io/) | [Questionnaire](https://forms.gle/sprthTC2swyt8dDb6) | [DOSMA Basics Tutorial](https://colab.research.google.com/drive/1zY5-3ZyTBrn7hoGE5lH0IoQqBzumzP1i?usp=sharing)
 
