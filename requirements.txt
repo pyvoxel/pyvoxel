@@ -1,0 +1,10 @@
+dataclasses>=0.6
+numpy
+natsort
+nibabel
+packaging
+pydicom>=1.6.0
+PyYAML>=5.4.1
+tabulate
+termcolor
+tqdm>=4.42.0

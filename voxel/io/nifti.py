@@ -1,0 +1,100 @@
+"""NIfTI I/O.
+
+This module contains NIfTI input/output helpers.
+
+
+"""
+
+import os
+from typing import Collection
+
+import nibabel as nib
+
+import voxel as vx
+from voxel.io.format_io import DataReader, DataWriter, ImageDataFormat
+from voxel.med_volume import MedicalVolume
+
+__all__ = ["NiftiReader", "NiftiWriter"]
+
+
+class NiftiReader(DataReader):
+    """A class for reading NIfTI files.
+
+    Attributes:
+        data_format_code (ImageDataFormat): The supported image data format.
+    """
+
+    data_format_code = ImageDataFormat.nifti
+
+    def load(self, file_path, mmap: bool = False) -> MedicalVolume:
+        """Load volume from NIfTI file path.
+
+        A NIfTI file should only correspond to one volume.
+
+        Args:
+            file_path (str): File path to NIfTI file.
+            mmap (bool): Whether to use memory mapping.
+
+        Returns:
+            MedicalVolume: Loaded volume.
+
+        Raises:
+            FileNotFoundError: If `file_path` not found.
+            ValueError: If `file_path` does not end in a supported NIfTI extension.
+        """
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError("{} not found".format(file_path))
+
+        if not self.data_format_code.is_filetype(file_path):
+            raise ValueError(
+                "{} must be a file with extension '.nii' or '.nii.gz'".format(file_path)
+            )
+
+        nib_img = nib.load(file_path)
+        return MedicalVolume.from_nib(
+            nib_img,
+            affine_precision=vx.config.affine_precision,
+            origin_precision=vx.config.affine_precision,
+            mmap=mmap,
+        )
+
+    def __serializable_variables__(self) -> Collection[str]:
+        return self.__dict__.keys()
+
+    read = load  # pragma: no cover
+
+
+class NiftiWriter(DataWriter):
+    """A class for writing volumes in NIfTI format.
+
+    Attributes:
+        data_format_code (ImageDataFormat): The supported image data format.
+    """
+
+    data_format_code = ImageDataFormat.nifti
+
+    def save(self, volume: MedicalVolume, file_path: str):
+        """Save volume in NIfTI format,
+
+        Args:
+            volume (MedicalVolume): Volume to save.
+            file_path (str): File path to NIfTI file.
+
+        Raises:
+            ValueError: If `file_path` does not end in a supported NIfTI extension.
+        """
+        if not self.data_format_code.is_filetype(file_path):
+            raise ValueError(
+                "{} must be a file with extension '.nii' or '.nii.gz'".format(file_path)
+            )
+
+        # Create dir if does not exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        nib_img = volume.to_nib()
+        nib.save(nib_img, file_path)
+
+    def __serializable_variables__(self) -> Collection[str]:
+        return self.__dict__.keys()
+
+    write = save  # pragma: no cover
