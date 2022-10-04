@@ -78,17 +78,16 @@ class UploadCommand(Command):
 
 # Required pacakges.
 REQUIRED = [
+    "dataclasses>=0.6",
     "numpy",
     "natsort",
     "nibabel",
     "packaging",
-    "pandas",
     "pydicom>=1.6.0",
-    "termcolor",
-    "tqdm>=4.42.0",
-    "dataclasses>=0.6",
     "PyYAML>=5.4.1",
     "tabulate",
+    "termcolor",
+    "tqdm>=4.42.0",
 ]
 
 # Optional packages.
@@ -99,6 +98,7 @@ EXTRAS = {
         # optional dependency libraries.
         "simpleitk",
         "sigpy",
+        "h5py",
         # formatting.
         "coverage",
         "flake8",

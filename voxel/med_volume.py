@@ -27,7 +27,6 @@ if env.sitk_available():
 if env.cupy_available():
     import cupy as cp
 if env.package_available("h5py"):
-
     import h5py
 
 if TYPE_CHECKING:
