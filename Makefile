@@ -31,7 +31,7 @@ build-docs:
 
 dev:
 	pip install -e .[dev,docs]
-	pip install --upgrade mistune==0.8.4 sphinx sphinx-rtd-theme recommonmark m2r2
 	pip install -r docs/requirements.txt
+	pre-commit install
 
 all: autoformat test build-docs
