@@ -43,8 +43,8 @@ respectively. These can be loaded into multiple volumes with ease:
 ```python
 import voxel as vx
 
-multi_echo_scan = dm.load("/path/to/multi-echo/scan", group_by="EchoNumbers", num_workers=8, verbose=True)
-dce_scan = dm.load("/path/to/dce/scan", group_by="TriggerTime")
+multi_echo_scan = vx.load("/path/to/multi-echo/scan", group_by="EchoNumbers", num_workers=8, verbose=True)
+dce_scan = vx.load("/path/to/dce/scan", group_by="TriggerTime")
 ```
 
 ### Data-Embedded Medical Images
