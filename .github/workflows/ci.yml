@@ -73,10 +73,10 @@ jobs:
           pip install pytest-cov
           make test-cov
       
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
+      # - name: Upload to codecov.io
+      #   uses: codecov/codecov-action@v1
+      #   with:
+      #     file: ./coverage.xml
+      #     flags: unittests
+      #     name: codecov-umbrella
+      #     fail_ci_if_error: true
