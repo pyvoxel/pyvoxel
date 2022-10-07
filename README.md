@@ -52,7 +52,7 @@ mv_a.set_metadata("StudyDescription", "A sample study")
 rss = np.sqrt(mv_a**2 + mv_b**2)
 
 # Move to GPU 0 for CuPy operations
-mv_gpu = mv_a.to(dosma.Device(0))
+mv_gpu = mv_a.to(vx.Device(0))
 
 # Take slices. Metadata will be sliced appropriately.
 mv_subvolume = mv_a[10:20, 10:20, 4:6]
