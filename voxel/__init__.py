@@ -3,6 +3,7 @@ from voxel.device import Device, cpu_device, get_array_module, get_device, to_de
 from voxel.io import load, read, save, write  # noqa: F401
 from voxel.io.dicom import DicomReader, DicomWriter  # noqa: F401
 from voxel.io.format_io import ImageDataFormat  # noqa: F401
+from voxel.io.http import HttpReader  # noqa: F401
 from voxel.io.nifti import NiftiReader, NiftiWriter  # noqa: F401
 from voxel.med_volume import MedicalVolume  # noqa: F401
 from voxel.orientation import to_affine  # noqa: F401
@@ -14,6 +15,7 @@ __all__ = [
     "MedicalVolume",
     "DicomReader",
     "DicomWriter",
+    "HttpReader",
     "NiftiReader",
     "NiftiWriter",
     "read",

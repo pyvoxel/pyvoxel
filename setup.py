@@ -85,6 +85,7 @@ REQUIRED = [
     "packaging",
     "pydicom>=1.6.0",
     "PyYAML>=5.4.1",
+    "requests",
     "tabulate",
     "termcolor",
     "tqdm>=4.42.0",

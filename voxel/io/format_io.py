@@ -15,7 +15,8 @@ class ImageDataFormat(enum.Enum):
     """Enum describing supported data formats for medical volume I/O."""
 
     nifti = 1, ("nii", "nii.gz")
-    dicom = 2, ("dcm", "ima")
+    dicom = 2, ("dcm", "ima", "dic")
+    http = 3, ("http://", "https://", "ftp://", "ftps://")
 
     def __new__(cls, key_code, extensions):
         """
@@ -28,6 +29,18 @@ class ImageDataFormat(enum.Enum):
         obj.extensions = extensions
         return obj
 
+    def is_url(self, url: Union[str, Path, os.PathLike]) -> bool:
+        """Verify if file path is a URL.
+
+        Args:
+            url (str): URL.
+
+        Returns:
+            bool: True if file_path is a URL, False otherwise.
+        """
+        return any([url.startswith(ext.lower()) for ext in self.extensions])
+
+
     def is_filetype(self, file_path: Union[str, Path, os.PathLike]) -> bool:
         """Verify if file path matches the file type specified by ImageDataFormat.
 
@@ -39,10 +52,26 @@ class ImageDataFormat(enum.Enum):
         Returns:
             bool: True if file_path has valid extension, False otherwise.
         """
-        file_path = str(file_path)
-        bool_list = [file_path.lower().endswith(".%s" % ext.lower()) for ext in self.extensions]
 
-        return bool(sum(bool_list))
+        file_path = str(file_path).lower()
+        return any([file_path.endswith(".%s" % ext.lower()) for ext in self.extensions])
+
+    def is_format(self, path: Union[str, Path, os.PathLike]) -> bool:
+        """Verify if file path matches the file type specified by ImageDataFormat.
+
+        This method checks to make sure the extensions are appropriate.
+
+        Args:
+            path (str): File path or URL.
+
+        Returns:
+            bool: True if file_path has valid extension, False otherwise.
+        """
+
+        if self == ImageDataFormat.http:
+            return self.is_url(path)
+
+        return self.is_filetype(path) or self.is_url(path)
 
     @classmethod
     def get_image_data_format(cls, file_or_dir_path: Union[str, Path, os.PathLike]):
@@ -61,7 +90,7 @@ class ImageDataFormat(enum.Enum):
             ValueError: If no compatible ImageDataFormat found.
         """
         for im_data_format in cls:
-            if im_data_format.is_filetype(file_or_dir_path):
+            if im_data_format.is_format(file_or_dir_path):
                 return im_data_format
 
         # if no extension found, assume the name corresponds to a directory

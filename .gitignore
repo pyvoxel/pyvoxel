@@ -29,3 +29,6 @@ coverage.xml
 
 # data
 unittest-data/
+
+# notebooks
+notebooks/

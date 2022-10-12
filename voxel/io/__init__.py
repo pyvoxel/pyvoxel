@@ -3,11 +3,13 @@ import os
 from pathlib import Path
 from typing import List, Union
 
-from voxel.io import dicom, nifti  # noqa: F401
+from voxel.io import dicom, http, nifti  # noqa: F401
 from voxel.io.dicom import *  # noqa
 from voxel.io.dicom import DicomReader, DicomWriter
 from voxel.io.format_io import ImageDataFormat  # noqa
 from voxel.io.format_io import DataReader, DataWriter
+from voxel.io.http import _is_valid_url
+from voxel.io.http import HttpReader
 from voxel.io.nifti import *  # noqa
 from voxel.io.nifti import NiftiReader, NiftiWriter
 from voxel.med_volume import MedicalVolume
@@ -25,10 +27,15 @@ __all__ = [
 ]
 __all__.extend(dicom.__all__)
 __all__.extend(["ImageDataFormat"])
+__all__.extend(http.__all__)
 __all__.extend(nifti.__all__)
 
 
-_READERS = {ImageDataFormat.dicom: DicomReader, ImageDataFormat.nifti: NiftiReader}
+_READERS = {
+    ImageDataFormat.dicom: DicomReader,
+    ImageDataFormat.nifti: NiftiReader,
+    ImageDataFormat.http: HttpReader,
+}
 _WRITERS = {ImageDataFormat.dicom: DicomWriter, ImageDataFormat.nifti: NiftiWriter}
 
 
