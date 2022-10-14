@@ -15,8 +15,7 @@ __all__ = [
     "MedicalVolume",
     "DicomReader",
     "DicomWriter",
-    "JsonDataset"
-    "NiftiReader",
+    "JsonDataset" "NiftiReader",
     "NiftiWriter",
     "read",
     "save",

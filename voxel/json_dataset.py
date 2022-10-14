@@ -4,12 +4,12 @@ from base64 import b64decode, b64encode
 from collections.abc import MutableMapping
 from enum import Enum, unique
 from numbers import Number
-from typing import AbstractSet, List, Tuple, Sequence, Dict, Optional, Any, Union
+from typing import AbstractSet, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from pydicom import Dataset
-from pydicom.datadict import tag_for_keyword, dictionary_VR
-from pydicom.tag import TagType, Tag
+from pydicom.datadict import dictionary_VR, tag_for_keyword
+from pydicom.tag import Tag, TagType
 
 __all__ = ["JsonDataset", "JsonVR", "parse_json_value", "to_json_tag", "json_tag_for_keyword"]
 
@@ -36,6 +36,7 @@ def json_tag_for_keyword(keyword: str) -> Optional[str]:
 
     return to_json_tag(tag)
 
+
 def parse_json_value(elem: Dict, unpack: bool = True) -> Any:
     """Parse a JSON value into its corresponding Python type.
 
@@ -43,7 +44,7 @@ def parse_json_value(elem: Dict, unpack: bool = True) -> Any:
         elem (Dict): The JSON value to parse.
         unpack (bool, optional): Whether to unpack the value. Defaults to True.
     """
-    if not "vr" in elem:
+    if "vr" not in elem:
         raise ValueError("Element does not have a VR.")
 
     vr = JsonVR(elem["vr"])
@@ -288,7 +289,7 @@ class JsonDataset:
             else:
                 self._dict[json_tag] = {"vr": vr.value, "Value": _pack_value(value)}
         else:
-            self._dict[json_tag] = { "vr": vr.value }
+            self._dict[json_tag] = {"vr": vr.value}
 
     def __setitem__(self, key: TagType, value: Any):
         """Set an item on the dataset.
@@ -366,8 +367,21 @@ class JsonVR(Enum):
     def is_bulk_data_uri_type(self) -> bool:
         """Return True if the VR is a bulk data URI type."""
         return self in [
-            JsonVR.FL, JsonVR.FD, JsonVR.IS, JsonVR.LT, JsonVR.OB, JsonVR.OD, JsonVR.OF, JsonVR.OW,
-            JsonVR.SL, JsonVR.SS, JsonVR.ST, JsonVR.UL, JsonVR.UN, JsonVR.US, JsonVR.UT,
+            JsonVR.FL,
+            JsonVR.FD,
+            JsonVR.IS,
+            JsonVR.LT,
+            JsonVR.OB,
+            JsonVR.OD,
+            JsonVR.OF,
+            JsonVR.OW,
+            JsonVR.SL,
+            JsonVR.SS,
+            JsonVR.ST,
+            JsonVR.UL,
+            JsonVR.UN,
+            JsonVR.US,
+            JsonVR.UT,
         ]
 
     def is_supported_writable_type(self, value: Any) -> bool:
