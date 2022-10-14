@@ -56,7 +56,6 @@ For example,
 
 For details on how the affine matrix is used for reformatting see
 :class:`voxel.MedicalVolume`.
-
 """
 from typing import Sequence, Union
 

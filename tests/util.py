@@ -80,10 +80,8 @@ def get_expected_data_path(fp):
 
 
 def requires_packages(*packages):
-    """
-    Decorator for functions that should only execute when
-    all packages defined by *args are supported.
-    """
+    """Decorator for functions that should only execute when all packages defined by *args are
+    supported."""
 
     def _decorator(func):
         def _wrapper(*args, **kwargs):

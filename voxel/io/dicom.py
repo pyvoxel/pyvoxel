@@ -1,5 +1,4 @@
-"""
-DICOM I/O.
+"""DICOM I/O.
 
 This module contains DICOM input/output helpers.
 

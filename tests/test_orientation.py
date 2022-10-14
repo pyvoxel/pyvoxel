@@ -23,10 +23,10 @@ class TestOrientation(unittest.TestCase):
         self.filepaths = filepaths
 
     def check_orientations(self, mv: MedicalVolume, orientations):
-        """
-        Apply each orientation specified in orientations to the Medical Volume mv
-        Assert if mv --> apply orientation --> apply original orientation != mv original
-        position coordinates.
+        """Check the orientation of the medical volume is consistent.
+
+        Apply each orientation specified in orientations to the Medical Volume mv Assert if mv
+        --> apply orientation --> apply original orientation != mv original position coordinates.
 
         Args:
             mv: a Medical Volume

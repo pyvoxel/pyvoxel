@@ -281,8 +281,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
         return mv
 
     def reformat_as(self, other, inplace: bool = False) -> "MedicalVolume":
-        """Reformat this to the same orientation as ``other``.
-        Equivalent to ``self.reformat(other.orientation, inplace)``.
+        """Reformat this to the same orientation as ``other``. Equivalent to
+        ``self.reformat(other.orientation, inplace)``.
 
         Args:
             other (MedicalVolume): The result volume has the same orientation as ``other``.
@@ -834,10 +834,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
     @volume.setter
     def volume(self, value):
-        """
-        If the volume is of a different shape, the headers are no longer valid,
-        so delete all reorientations are done as part of MedicalVolume,
-        so reorientations are permitted.
+        """If the volume is of a different shape, the headers are no longer valid, so delete all
+        reorientations are done as part of MedicalVolume, so reorientations are permitted.
 
         However, external setting of the volume to a different shape array is not allowed.
         """
@@ -895,7 +893,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
     @property
     def dtype(self):
-        """The ``dtype`` of the ndarray. Same as ``self.volume.dtype``."""
+        """The ``dtype`` of the ndarray.
+
+        Same as ``self.volume.dtype``.
+        """
         return self._volume.dtype
 
     @property
@@ -1198,9 +1199,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         return axis
 
     def _reduce_array(self, func, *inputs, **kwargs) -> "MedicalVolume":
-        """
-        Assumes inputs have been verified.
-        """
+        """Assumes inputs have been verified."""
         device = self.device
         xp = device.xp
 

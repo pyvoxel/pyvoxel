@@ -1,8 +1,6 @@
 """NIfTI I/O.
 
 This module contains NIfTI input/output helpers.
-
-
 """
 
 import os

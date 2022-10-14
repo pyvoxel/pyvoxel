@@ -1,6 +1,4 @@
-"""Functions and classes for getting and setting computing devices.
-
-"""
+"""Functions and classes for getting and setting computing devices."""
 import numpy as np
 
 from voxel.utils import env
@@ -45,7 +43,6 @@ class Device(object):
     Note:
         This class is heavily based on
         `sigpy.Device <https://sigpy.readthedocs.io/en/latest/generated/sigpy.Device.html>`_.
-
     """
 
     def __init__(self, id_or_device):
