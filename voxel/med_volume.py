@@ -697,9 +697,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         if key not in headers[0] and default != np._NoValue:
             return default
-        else:
-            element = headers[0][key]
-        val = element.value
+
+        val = headers[0][key]
         if dtype is not None:
             val = dtype(val)
         return val
@@ -735,7 +734,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 except TypeError:
                     h.add_new(key, VR_registry[type(value)], value)
             else:
-                h[key].value = value
+                h[key] = value
 
     def materialize(self):
         if not self.is_mmap:
