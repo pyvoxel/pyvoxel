@@ -11,7 +11,13 @@ from pydicom import Dataset
 from pydicom.datadict import dictionary_VR, tag_for_keyword
 from pydicom.tag import Tag, TagType
 
-__all__ = ["JsonDataset", "JsonVR", "parse_json_value", "to_json_tag", "json_tag_for_keyword"]
+__all__ = [
+    "JsonDataset",
+    "JsonVR",
+    "parse_json_value",
+    "to_json_tag",
+    "json_tag_for_keyword"
+]
 
 
 def to_json_tag(key: TagType) -> str:
@@ -109,15 +115,17 @@ class JsonDataset:
         TypeError: If the dataset is not a dict or pydicom.Dataset.
     """
 
-    def __init__(self, dataset: Optional[Union[Dict, Dataset]] = {}):
-        super().__init__()
-
-        if isinstance(dataset, Dataset):
+    def __init__(self, dataset: Optional[Union[Dict, Dataset]] = None):
+        if isinstance(dataset, JsonDataset):
+            self._dict = dataset._dict
+        elif isinstance(dataset, Dataset):
             self._dict = dataset.to_json_dict()
-        elif isinstance(dataset, dict):
+        elif isinstance(dataset, Dict):
             self._dict: MutableMapping[str, Dict[str, Any]] = dataset
+        elif dataset is None:
+            self._dict = {}
         else:
-            raise TypeError("Expected Dataset or dict.")
+            raise TypeError("Expected JsonDataset, Dataset or Dict.")
 
     def __array__(self) -> np.ndarray:
         """Return the dataset as a numpy array."""
@@ -134,6 +142,17 @@ class JsonDataset:
     def copy(self) -> "JsonDataset":
         """Return a copy of the dataset."""
         return JsonDataset(self._dict.copy())
+
+    def data_element(self, name: str) -> Any:
+        """Return the data element for a given DICOM tag/keyword.
+
+        Args:
+            name (str): The DICOM tag/keyword to return the data element for.
+        """
+        json_tag = json_tag_for_keyword(name)
+        if json_tag is not None:
+            return self[json_tag]
+        return None
 
     def __delattr__(self, name: str) -> None:
         """Delete an attribute from the dataset.
@@ -315,6 +334,8 @@ class JsonDataset:
     def __repr__(self):
         """Return a string representation of the dataset."""
         return f"{self.__class__.__name__}(elements={len(self)})"
+
+    add_new = set_json_attr
 
 
 @unique
