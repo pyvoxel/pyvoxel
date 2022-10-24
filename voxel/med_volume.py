@@ -21,6 +21,8 @@ import voxel as vx
 import voxel.orientation as stdo
 from voxel.device import Device, cpu_device, get_array_module, get_device, to_device
 from voxel.utils import env
+from voxel.json_dataset import JsonDataset
+from voxel.io.dicom_io_utils import to_RAS_affine
 
 if env.sitk_available():
     import SimpleITK as sitk
@@ -153,13 +155,17 @@ class MedicalVolume(NDArrayOperatorsMixin):
         headers (array-like[pydicom.FileDataset]): Headers for DICOM files.
     """
 
-    def __init__(self, volume, affine, headers=None):
+    def __init__(self, volume, affine, headers=None, trim=True):
         if not isinstance(volume, np.memmap):
             xp = get_array_module(volume)
             volume = xp.asarray(volume)
         self._volume = volume
         self._affine = np.array(affine)
         self._headers = self._validate_and_format_headers(headers) if headers is not None else None
+
+        if trim:
+            self._trim_pixel_data()
+
 
     def save_volume(self, file_path: str, data_format: "ImageDataFormat" = None):
         """Write volumes in specified data format.
@@ -643,6 +649,60 @@ class MedicalVolume(NDArrayOperatorsMixin):
             tensor = tensor.contiguous()
         return tensor
 
+    def to_zarr(
+        self,
+        affine_attr: str = None,
+        headers_attr: str = None,
+        mode: str = "w-",
+        read_only: bool = True,
+        **kwargs,
+    ):
+        """Converts to Zarr store.
+        Args:
+            affine_attr (str, optional): Attribute key of the Zarr Array where the affine matrix
+                will be stored in. If `None`, the affine matrix will not be saved.
+            headers_attr (str, optional): Attribute key of the Zarr Array where the headers of the
+                `MedicalVolume` will be stored in. If `None`, headers will not be saved.
+            header_compressor (str, optional): Header compression algorithm to be applied to the
+                DICOM+JSON headers. Currently, only `tlc` is supported.
+            mode ({'r', 'r+', 'a', 'w', 'w-'}, optional): Persistence mode: 'r' means read only
+                (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if
+                doesn't exist); 'w' means create (overwrite if exists); 'w-' means create (fail if
+                exists). Default is **w-** to prevent inplace overwriting.
+            read_only (bool, optional): If `True`, the returned Zarr store will be read-only.
+            **kwargs: Additional parameters passed to `zarr.creation.open_array`.
+        Returns:
+            zarr.Array
+        Examples:
+            >>> mv = MedicalVolume(np.ones((10, 20, 30)), np.eye(4), headers=...)
+            >>> store = zarr.DirectoryStore("/path/to/store")
+            >>> mv.to_zarr(store=store)
+            >>> # Save headers to zarr attributes
+            >>> mv.to_zarr(store=store, headers_attr="headers")
+            >>> # Load with headers
+            >>> dm.MedicalVolume.from_zarr(store, headers_attr="headers")
+        """
+
+        if not env.package_available("zarr"):
+            raise ImportError(  # pragma: no cover
+                "zarr is not installed. Install it with `pip install zarr`. "
+            )
+
+        import zarr
+
+        arr = zarr.open_array(**{**kwargs, "shape": self.shape, "dtype": self.dtype}, mode=mode)
+        arr[:] = self._volume
+
+        if affine_attr is not None:
+            arr.attrs[affine_attr] = self.affine.tolist()
+
+        if headers_attr is not None:
+            json_headers = [h.to_json_dict() for h in self._headers.flatten().tolist()]
+            arr.attrs[headers_attr] = json_headers
+
+        arr.read_only = read_only
+        return arr
+
     def headers(self, flatten=False):
         """Returns headers.
 
@@ -660,7 +720,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self._headers.flatten()
         return self._headers
 
-    def get_metadata(self, key, dtype=None, default=np._NoValue):
+    def get_metadata(self, key, idx: int = 0, dtype=None, default=np._NoValue):
         """Get metadata value from first header.
 
         The first header is defined as the first header in ``np.flatten(self._headers)``.
@@ -668,6 +728,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         Args:
             key (``str`` or pydicom.BaseTag``): Metadata field to access.
+            idx (int, optional): Index of metadata field to access.
             dtype (type, optional): If specified, data type to cast value to.
                 By default for DICOM headers, data will be in the value
                 representation format specified by pydicom. See
@@ -695,10 +756,12 @@ class MedicalVolume(NDArrayOperatorsMixin):
             raise RuntimeError("No headers found. MedicalVolume must be initialized with `headers`")
         headers = self.headers(flatten=True)
 
-        if key not in headers[0] and default != np._NoValue:
+        if key not in headers[idx] and default != np._NoValue:
             return default
 
-        val = headers[0][key]
+        element = headers[idx][key]
+        val = element if isinstance(element, JsonDataset) else element.value
+
         if dtype is not None:
             val = dtype(val)
         return val
@@ -734,7 +797,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 except TypeError:
                     h.add_new(key, VR_registry[type(value)], value)
             else:
-                h[key] = value
+                if isinstance(h, JsonDataset):
+                    h[key] = value
+                else:
+                    h[key].value = value
 
     def materialize(self):
         if not self.is_mmap:
@@ -1120,6 +1186,70 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         return cls(array, affine, headers=headers)
 
+    @classmethod
+    def from_zarr(
+        cls,
+        store,
+        mode="r",
+        affine: np.ndarray = None,
+        affine_attr: str = None,
+        headers_attr: str = None,
+        default_ornt: Tuple[str, str] = np._NoValue,
+        **kwargs,
+    ) -> "MedicalVolume":
+        """Constructs MedicalVolume from zarr arrays.
+        Args:
+            store (MutableMapping or string):
+                Store or path to directory in file system or name of zip file.
+            mode ({'r', 'r+', 'a', 'w', 'w-'}, optional): Persistence mode: 'r' means read only
+                (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if
+                doesn't exist); 'w' means create (overwrite if exists); 'w-' means create (fail if
+                exists). Defaults to _r_ for safety reasons.
+            affine (array-like): See `MedicalVolume` class parameters.
+            affine_attr (str, optional): Attribute key from the Zarr Array where the affine matrix
+                is stored in.
+            headers_attr (str, optional): Attribute key to retrieve the headers of the
+                `MedicalVolume` from. If `None`, headers will not be retrieved.
+            default_ornt (Tuple[str, str], optional): See `MedicalVolume` class parameters.
+            **kwargs: Additional parameters are passed through to `zarr.creation.open_array`.
+        Returns:
+            MedicalVolume: The medical image.
+        Examples:
+            >>> import zarr
+            >>> store = zarr.ZipStore('/path/to/store')
+            >>> zarr.save_array(store, np.zeros((10, 10)))
+            >>> MedicalVolume.from_zarr(store)
+        """
+
+        if not env.package_available("zarr"):
+            raise ImportError(  # pragma: no cover
+                "zarr is not installed. Install it with `pip install zarr`. "
+            )
+
+        import zarr
+
+        arr = zarr.open_array(store, mode, **kwargs)
+        headers = None
+
+        if isinstance(headers_attr, str):
+            zarr_header = arr.attrs.get(headers_attr, None)
+            if zarr_header is None:
+                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
+
+            headers = [JsonDataset(h) for h in zarr_header]
+
+        if isinstance(affine_attr, str):
+            if affine_attr not in arr.attrs:
+                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
+
+            affine = np.array(arr.attrs.get(affine_attr)).reshape(4, 4)
+        elif affine is None:
+            affine = to_RAS_affine(headers, default_ornt)
+        else:
+            affine = np.eye(4)
+
+        return cls(arr, affine, headers)
+
     def _partial_clone(self, **kwargs) -> "MedicalVolume":
         """Copies constructor information from ``self`` if not available in ``kwargs``."""
         if kwargs.get("volume", None) is False:
@@ -1159,6 +1289,13 @@ class MedicalVolume(NDArrayOperatorsMixin):
         shape = (1,) * (ndim - len(headers.shape)) + headers.shape
         headers = np.reshape(headers, shape)
         return headers
+
+    def _trim_pixel_data(self):
+        """Removes pixel data from headers."""
+        if self._headers is not None:
+            for h in np.nditer(self._headers, flags=["refs_ok"]):
+                if "PixelData" in h:
+                    del h["PixelData"]
 
     def _extract_input_array_ufunc(self, input, device=None):
         if device is None:
