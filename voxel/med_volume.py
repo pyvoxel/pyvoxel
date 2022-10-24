@@ -680,7 +680,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             >>> # Save headers to zarr attributes
             >>> mv.to_zarr(store=store, headers_attr="headers")
             >>> # Load with headers
-            >>> dm.MedicalVolume.from_zarr(store, headers_attr="headers")
+            >>> MedicalVolume.from_zarr(store, headers_attr="headers")
         """
 
         if not env.package_available("zarr"):
