@@ -760,7 +760,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return default
 
         element = headers[idx][key]
-        val = element if isinstance(element, JsonDataset) else element.value
+        val = element if not isinstance(element, pydicom.DataElement) else element.value
 
         if dtype is not None:
             val = dtype(val)
@@ -1243,7 +1243,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
 
             affine = np.array(arr.attrs.get(affine_attr)).reshape(4, 4)
-        elif affine is None:
+        elif affine is None and len(headers) > 1:
             affine = to_RAS_affine(headers, default_ornt)
         else:
             affine = np.eye(4)
