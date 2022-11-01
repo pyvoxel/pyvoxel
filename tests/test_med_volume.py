@@ -304,7 +304,7 @@ class TestMedicalVolume(unittest.TestCase):
 
         filepath = pydd.get_testdata_file("MR_small.dcm")
         dr = DicomReader(group_by=None)
-        mv = dr.load(filepath)[0]
+        mv = dr.load(filepath)
         mv2 = MedicalVolume.from_sitk(
             mv.to_sitk(transpose_inplane=True), copy=True, transpose_inplane=True
         )

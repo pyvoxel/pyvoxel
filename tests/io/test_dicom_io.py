@@ -461,8 +461,6 @@ class TestDicomIO(ututils.TempPathMixin):
 
         dr = DicomReader(group_by=None)
         mv = dr(filepath)
-        assert len(mv) == 1
-        mv = mv[0]
         assert mv.shape == (arr.shape) + (1,)
         assert self.are_equivalent_headers(mv.headers(flatten=True)[0], mv_pydicom)
 
@@ -501,7 +499,7 @@ class TestDicomIO(ututils.TempPathMixin):
 
         # bytes
         with open(filepath, "rb") as f:
-            mv2 = dr.load(f, group_by="EchoNumbers")
+            mv2 = dr.load(f, group_by="EchoNumbers")[0]
         assert mv2.is_identical(mv)
 
     def test_save_different_bits(self):
