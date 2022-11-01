@@ -6,6 +6,7 @@ import h5py
 import nibabel as nib
 import nibabel.testing as nib_testing
 import numpy as np
+import pydicom
 import pydicom.data as pydd
 import SimpleITK as sitk
 
@@ -138,6 +139,115 @@ class TestMedicalVolume(unittest.TestCase):
         assert mv_nh._headers.shape == (1,) * len(mv_nh.shape)
         assert mv_nh.get_metadata("EchoTime") == 40.0
         assert mv_nh[:1, :2, :3]._headers.shape == (1,) * len(mv_nh.shape)
+
+    def test_apply_rescale(self):
+        metadata = {"RescaleSlope": "2.5", "RescaleIntercept": "1.0"}
+        volume = np.arange(9, dtype=np.uint16).reshape(3, 3, 1)
+        headers = ututils.build_dummy_headers(volume.shape[2:], metadata)
+        mv_no_headers = MedicalVolume(volume, self._AFFINE)
+        mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
+        mv = MedicalVolume(volume, self._AFFINE, headers=headers)
+
+        with self.assertRaises((RuntimeError)):
+            mv_no_headers.apply_rescale()
+
+        with self.assertRaises((ValueError)):
+            mv_incorrect_headers.apply_rescale()
+
+        assert np.allclose(mv.apply_rescale()._volume, volume * 2.5 + 1.0)
+
+        # test sync
+        mv2 = mv.apply_rescale(sync=True)
+        assert mv.get_metadata("RescaleSlope", dtype=float) == 2.5
+        assert mv.get_metadata("RescaleIntercept", dtype=float) == 1.0
+
+        assert mv2.get_metadata("RescaleSlope", dtype=float) == 1.0
+        assert mv2.get_metadata("RescaleIntercept", dtype=float) == 0.0
+
+    def test_apply_modality_lut(self):
+        ds = pydicom.Dataset()
+        lut = pydicom.Dataset()
+        lut_data_little_endian = bytearray([10, 0, 11, 0, 12, 0, 13, 0])
+        lut_data_big_endian = bytearray([0, 10, 0, 11, 0, 12, 0, 13])
+
+        ds.PixelRepresentation = 1
+        ds.ModalityLUTSequence = pydicom.Sequence()
+        ds.ModalityLUTSequence.append(lut)
+
+        lut.LUTDescriptor = [4, 2, 16]  # entries, first mapped, bits
+        lut.LUTExplanation = "Test"
+        ds.RescaleIntercept = "0"
+        ds.RescaleSlope = "1"
+
+        volume = np.arange(9, dtype=np.uint16).reshape(3, 3, 1)
+        mv_no_headers = MedicalVolume(volume, self._AFFINE)
+        mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers=[pydicom.Dataset()])
+        mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
+
+        with self.assertRaises((RuntimeError)):
+            mv_no_headers.apply_modality_lut()
+
+        with self.assertRaises((ValueError)):
+            mv_incorrect_headers.apply_modality_lut()
+
+        # test modality lut
+        correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
+        correct_i16 = np.array(correct, dtype=np.int16).reshape(3, 3, 1)
+        correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
+
+        # test little endian
+        lut.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        mv_little_endian = mv.apply_modality_lut()
+        assert np.allclose(mv_little_endian._volume, correct_i16)
+
+        # test big endian
+        lut.LUTData = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
+        mv_big_endian = mv.apply_modality_lut()
+        assert np.allclose(mv_big_endian._volume, correct_u8)
+
+        # test sync and inplace
+        lut.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        mv_inplace = mv.apply_modality_lut(inplace=True, sync=True)
+        assert mv_inplace is mv
+
+        with self.assertRaises((ValueError)):
+            mv_inplace.apply_modality_lut()
+
+    def test_apply_window(self):
+        volume = np.arange(9, dtype=np.uint8).reshape(3, 3, 1)
+        ds = pydicom.Dataset()
+        ds.WindowCenter = "4.5"
+        ds.WindowWidth = "4.0"
+        ds.PhotometricInterpretation = "MONOCHROME2"
+        ds.PixelRepresentation = 0
+        ds.BitsAllocated = 8
+        ds.BitsStored = 8
+        ds.VOILUTFunction = "LINEAR"
+        mv_no_headers = MedicalVolume(volume, self._AFFINE)
+        mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
+        mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
+
+        with self.assertRaises((RuntimeError)):
+            mv_no_headers.apply_window()
+
+        with self.assertRaises((ValueError)):
+            mv_incorrect_headers.apply_window()
+
+        # test VOILUTFunction linear
+        correct_linear = np.array([0, 0, 0, 42.5, 127.5, 212.5, 255, 255, 255])
+        assert np.allclose(mv.apply_window()._volume.flatten(), correct_linear)
+
+        # test VOILUTFunction exact
+        correct_exact = np.array([0.0, 0.0, 0.0, 31.875, 95.625, 159.375, 223.125, 255.0, 255.0])
+        mv.set_metadata("VOILUTFunction", "LINEAR_EXACT", force=True)
+        assert np.allclose(mv.apply_window()._volume.flatten(), correct_exact)
+
+        # test modality LUT to be 16 bit, while volume is 8 bit
+        lut = pydicom.Dataset()
+        ds.ModalityLUTSequence = pydicom.Sequence()
+        ds.ModalityLUTSequence.append(lut)
+        lut.LUTDescriptor = [4, 2, 16]  # entries, first mapped, bits
+        assert mv.apply_window()._volume.max() == 2**16 - 1
 
     def test_clone(self):
         mv = MedicalVolume(np.random.rand(10, 20, 30), self._AFFINE)

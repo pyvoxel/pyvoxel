@@ -737,6 +737,178 @@ class MedicalVolume(NDArrayOperatorsMixin):
             else:
                 h[key].value = value
 
+    def _del_metadata(self, key):
+        """Deletes metadata for all headers.
+
+        Args:
+            key (str or pydicom.BaseTag): Metadata field to access.
+
+        Raises:
+            RuntimeError: If ``self._headers`` is ``None``.
+        """
+        if self._headers is None:
+            raise RuntimeError("No headers found. MedicalVolume must be initialized with `headers`")
+        for h in self.headers(flatten=True):
+            del h[key]
+
+    def apply_rescale(self, inplace: bool = False, sync: bool = True):
+        """Applies rescale to volume.
+
+        Args:
+            inplace (bool, optional): If ``True``, applies rescale in place.
+                Otherwise, returns a copy of the volume with rescale applied.
+            sync (bool, optional): If ``True``, updates the headers.
+
+        Returns:
+            MedicalVolume: Volume with rescale applied.
+        """
+        if self._headers is None:
+            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
+
+        h = self.headers(flatten=True)[0]
+        if "RescaleSlope" not in h or "RescaleIntercept" not in h:
+            raise ValueError("RescaleSlope and RescaleIntercept must be in header.")
+
+        mv = self if inplace else self.clone()
+        mv = mv.astype("float64")
+        mv._volume *= float(h.RescaleSlope)
+        mv._volume += float(h.RescaleIntercept)
+
+        if sync:
+            mv.set_metadata("RescaleSlope", "1.0")
+            mv.set_metadata("RescaleIntercept", "0.0")
+
+        return mv
+
+    def apply_modality_lut(self, inplace: bool = False, sync: bool = True):
+        """Applies modality LUT to volume.
+
+        Args:
+            inplace (bool, optional): If ``True``, applies modality LUT in place.
+                Otherwise, returns a new MedicalVolume.
+            sync (bool, optional): If ``True``, updates the headers.
+
+        Raises:
+            RuntimeError: If ``self._headers`` is ``None``.
+        """
+        if self._headers is None:
+            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
+
+        h = self.headers(flatten=True)[0]
+        if "ModalityLUTSequence" not in h:
+            raise ValueError("Modality LUT Sequence must be defined in header.")
+
+        xp = self.device.xp
+        mv = self if inplace else self.clone()
+
+        lut = h.ModalityLUTSequence[0]
+        entries = lut.LUTDescriptor[0] if lut.LUTDescriptor[0] > 0 else 2**16
+        first_mapped = lut.LUTDescriptor[1]
+
+        bits = lut.LUTDescriptor[2]
+        if bits not in [8, 16]:
+            raise ValueError("Bits in the LUTDescriptor must be 8 or 16.")
+
+        sign = "u" if h.PixelRepresentation == 0 else "i"
+        lut_dtype = f"<{sign}{bits // 8}"
+
+        if bits / 8 * entries != len(lut.LUTData.value):
+            raise ValueError("LUTData byte length does not match LUTDescriptor.")
+
+        if lut.LUTData.VR == "OW":
+            lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
+
+        # parse the LUTData into a numpy array
+        lut_data = xp.frombuffer(bytearray(lut.LUTData.value), dtype=lut_dtype)
+
+        # convert all pixel values into LUT indices
+        lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
+        mapped_pixels = self._volume >= first_mapped
+        lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
+        xp.clip(lut_idxs, 0, entries - 1, out=lut_idxs)
+        mv._volume = lut_data[lut_idxs]
+
+        if sync:
+            mv._del_metadata("ModalityLUTSequence")
+            mv.set_metadata("RescaleSlope", "1.0", force=True)
+            mv.set_metadata("RescaleIntercept", "0.0", force=True)
+
+        return mv
+
+    def apply_window(self, index: int = 0, inplace: bool = False):
+        """Applies window to volume.
+
+        Args:
+            index (int, optional): Index of window to apply.
+            inplace (bool, optional): If ``True``, applies window in place.
+
+        Returns:
+            ``MedicalVolume`` with window applied.
+        """
+        if self._headers is None:
+            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
+
+        h = self.headers(flatten=True)[0]
+        xp = self.device.xp
+        mv = self if inplace else self.clone()
+
+        if "WindowCenter" not in h or "WindowWidth" not in h:
+            raise ValueError("Window Center and Window Width must be present in headers.")
+
+        if "RescaleIntercept" in h and "ModalityLUTSequence" in h:
+            raise ValueError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
+
+        wc = h["WindowCenter"]
+        wc = wc.value[index] if wc.VM > 1 else wc.value
+        ww = h["WindowWidth"]
+        ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
+
+        bits = h.BitsStored
+        if "ModalityLUTSequence" in h:
+            lut = h.ModalityLUTSequence[0]
+            bits = lut.LUTDescriptor[2]
+
+        y_min, y_max = 0, 2**bits - 1
+        if h.PixelRepresentation == 1:
+            y_min -= 2 ** (bits - 1)
+            y_max -= 2 ** (bits - 1)
+
+        if "RescaleSlope" in h and "RescaleIntercept" in h:
+            y_min = y_min * float(h.RescaleSlope) + float(h.RescaleIntercept)
+            y_max = y_max * float(h.RescaleSlope) + float(h.RescaleIntercept)
+
+        y_range = y_max - y_min
+        mv = mv.astype("float64")
+
+        voi_func = str(h.get("VOILUTFunction", "LINEAR")).upper()
+        if voi_func in ["LINEAR", "LINEAR_EXACT"]:
+            if voi_func == "LINEAR":
+                if ww < 1:
+                    raise ValueError("Window Width must be greater than 1 for LINEAR.")
+                wc -= 0.5
+                ww -= 1
+            elif ww <= 0:
+                raise ValueError("Window Width must be greater than 0 for LINEAR_EXACT.")
+
+            lb = mv._volume <= (wc - ww / 2)
+            ub = mv._volume > (wc + ww / 2)
+            wb = xp.logical_and(~lb, ~ub)
+
+            mv._volume[lb] = y_min
+            mv._volume[ub] = y_max
+            if wb.any():
+                mv._volume[wb] = ((mv._volume[wb] - wc) / ww + 0.5) * y_range + y_min
+
+        elif voi_func == "SIGMOID":
+            if ww <= 0:
+                raise ValueError("Window Width must be greater than 0 for SIGMOID.")
+
+            mv._volume = y_range / (1 + np.exp(-4 * (mv._volume - wc) / ww)) + y_min
+        else:
+            raise ValueError(f"VOILUTFunction {voi_func} is not supported.")
+
+        return mv
+
     def materialize(self):
         if not self.is_mmap:
             return self
