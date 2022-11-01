@@ -51,8 +51,8 @@ class TestFormatIOUtils(unittest.TestCase):
         assert vol.is_identical(expected)
 
         dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
-        vol = vio.generic_load(dcm_data)[0]
-        expected = DicomReader().load(dcm_data)[0]
+        vol = vio.generic_load(dcm_data)
+        expected = DicomReader().load(dcm_data)
         assert vol.is_identical(expected)
 
 
@@ -73,29 +73,29 @@ def test_read():
     assert vol.is_identical(expected)
 
     dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
-    vol = vx.read(dcm_data)[0]
-    expected = DicomReader().load(dcm_data)[0]
+    vol = vx.read(dcm_data)
+    expected = DicomReader().load(dcm_data)
     assert vol.is_identical(expected)
 
     dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
     vol = vx.read(dcm_data, unpack=True)
-    expected = DicomReader().load(dcm_data)[0]
+    expected = DicomReader().load(dcm_data)
     assert vol.is_identical(expected)
 
     dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
     vol = vx.read(dcm_data, group_by="EchoNumbers")[0]
-    expected = DicomReader().load(dcm_data)[0]
+    expected = DicomReader(group_by="EchoNumbers").load(dcm_data)[0]
     assert vol.is_identical(expected)
 
 
 def test_write(tmpdir):
     filepath = pydd.get_testdata_file("MR_small.dcm")
     dr = DicomReader(group_by=None)
-    mv_base = dr.load(filepath)[0]
+    mv_base = dr.load(filepath)
 
     dicom_out_dir = tmpdir / "test_save_sort_by"
     vx.write(mv_base, dicom_out_dir, sort_by="InstanceNumber")
-    mv2 = dr.load(dicom_out_dir)[0]
+    mv2 = dr.load(dicom_out_dir)
     assert mv2.is_identical(mv_base)
 
     nr = NiftiReader()

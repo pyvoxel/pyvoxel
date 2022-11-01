@@ -53,7 +53,7 @@ class TestDicomIO(ututils.TempPathMixin):
             curr_scan_info = ututils.SCANS_INFO[curr_scan]
 
             dicom_path = ututils.get_dicoms_path(dp)
-            volumes = self.dr.load(dicom_path)
+            volumes = self.dr.load(dicom_path, group_by="EchoNumbers")
 
             assert type(volumes) is list, "Expected list output"
             expected_num_echos = curr_scan_info["expected_num_echos"]
@@ -103,10 +103,10 @@ class TestDicomIO(ututils.TempPathMixin):
             multi_echo_read_paths = ututils.get_read_paths(dp, self.data_format)
 
             dicom_path = ututils.get_dicoms_path(dp)
-            volumes = self.dr.load(dicom_path)
+            volumes = self.dr.load(dicom_path, group_by="EchoNumbers")
 
             for rfp in multi_echo_read_paths:
-                echo_volume = self.dr.load(rfp)
+                echo_volume = self.dr.load(rfp, group_by="EchoNumbers")
                 echo_name = os.path.basename(rfp)
                 echo_number = int(re.match(".*?([0-9]+)$", echo_name).group(1))
 
@@ -151,13 +151,14 @@ class TestDicomIO(ututils.TempPathMixin):
             curr_scan = ututils.SCANS[ind]  # noqa: F841
             multi_echo_read_paths = ututils.get_read_paths(dp, self.data_format)  # noqa: F841
             dicom_path = ututils.get_dicoms_path(dp)
-            expected = self.dr.load(dicom_path)
+            expected = self.dr.load(dicom_path, group_by="EchoNumbers")
             volumes = self.dr.load(
                 [
                     os.path.join(dicom_path, x)
                     for x in os.listdir(dicom_path)
                     if not x.startswith(".") and x.endswith(".dcm")
-                ]
+                ],
+                group_by="EchoNumbers",
             )
 
             assert len(expected) == len(volumes)
@@ -181,7 +182,7 @@ class TestDicomIO(ututils.TempPathMixin):
             ]
         )
         expected = pydicom.read_file(dcm_file, force=True)
-        vol = self.dr.load(dcm_file)[0]
+        vol = self.dr.load(dcm_file, group_by="EchoNumbers")[0]
 
         assert vol.volume.ndim == 3
         assert vol.volume.shape == expected.pixel_array.shape + (1,)
@@ -207,13 +208,13 @@ class TestDicomIO(ututils.TempPathMixin):
             # Read in dicom information, write out to different folder
             # (as multiple echos if possible).
             # Compare to baseline echos separated manually
-            volumes = self.dr.load(dicom_path)
+            volumes = self.dr.load(dicom_path, group_by="EchoNumbers")
             for ind, vol in enumerate(volumes):
                 write_fp = os.path.join(write_path, "e%d" % (ind + 1))
                 self.dw.save(vol, write_fp)
 
             for ind, rfp in enumerate(read_filepaths):
-                echo_volume_loaded = self.dr.load(rfp)[0]
+                echo_volume_loaded = self.dr.load(rfp, group_by="EchoNumbers")[0]
                 e_t = volumes[ind]
                 assert echo_volume_loaded.is_identical(
                     e_t
@@ -238,14 +239,14 @@ class TestDicomIO(ututils.TempPathMixin):
     def test_dicom_writer_nd(self):
         """Test writing dicoms for >3D MedicalVolume data."""
         dicom_path = ututils.get_dicoms_path(ututils.get_scan_dirpath("qdess"))
-        e1, e2 = tuple(self.dr.load(dicom_path))
+        e1, e2 = tuple(self.dr.load(dicom_path, group_by="EchoNumbers"))
         vol, headers = np.stack([e1, e2], axis=-1), np.stack([e1.headers(), e2.headers()], axis=-1)
         vol = MedicalVolume(vol, affine=e1.affine, headers=headers)
 
         write_path = ututils.get_write_path(dicom_path, self.data_format)
         self.dw.save(vol, write_path)
 
-        e1_l, e2_l = tuple(self.dr.load(write_path))
+        e1_l, e2_l = tuple(self.dr.load(write_path, group_by="EchoNumbers"))
         assert e1_l.is_identical(e1)
         assert e2_l.is_identical(e2)
 
@@ -269,7 +270,7 @@ class TestDicomIO(ututils.TempPathMixin):
             dicom_path = ututils.get_dicoms_path(dp)
             write_path = ututils.get_write_path(dp, self.data_format)
 
-            volumes = self.dr.load(dicom_path)
+            volumes = self.dr.load(dicom_path, group_by="EchoNumbers")
 
             # Reorient images
             # echo 1 and echo 2 have the same orientation
@@ -309,7 +310,7 @@ class TestDicomIO(ututils.TempPathMixin):
             ]
 
             for ind, rfp in enumerate(load_echos_paths):
-                e_loaded = self.dr.load(rfp)[0]
+                e_loaded = self.dr.load(rfp, group_by="EchoNumbers")[0]
                 e_vol = volumes[ind]
                 echo_num = ind + 1
 
@@ -340,8 +341,11 @@ class TestDicomIO(ututils.TempPathMixin):
             curr_scan_info = ututils.SCANS_INFO[curr_scan]  # noqa
 
             dicom_path = ututils.get_dicoms_path(dp)
-            volumes_exp = self.dr.load(dicom_path)
-            volumes = DicomReader(num_workers=ututils.num_workers()).load(dicom_path)
+            volumes_exp = self.dr.load(dicom_path, group_by="EchoNumbers")
+            volumes = DicomReader(num_workers=ututils.num_workers()).load(
+                dicom_path,
+                group_by="EchoNumbers",
+            )
             assert len(volumes_exp) == len(volumes)
 
             for vol, exp in zip(volumes, volumes_exp):
@@ -356,7 +360,7 @@ class TestDicomIO(ututils.TempPathMixin):
 
             dicom_path = ututils.get_dicoms_path(dp)
             write_path = ututils.get_write_path(dp, self.data_format)
-            volumes = self.dr.load(dicom_path)
+            volumes = self.dr.load(dicom_path, group_by="EchoNumbers")
 
             for ind, vol in enumerate(volumes):
                 exp_path = os.path.join(write_path, "expected", "e%d" % (ind + 1))
@@ -365,8 +369,8 @@ class TestDicomIO(ututils.TempPathMixin):
                 self.dw.save(vol, exp_path)
                 DicomWriter(num_workers=ututils.num_workers()).save(vol, out_path)
 
-                expected = self.dr.load(exp_path)[0]
-                out = self.dr.load(out_path)[0]
+                expected = self.dr.load(exp_path, group_by="EchoNumbers")[0]
+                out = self.dr.load(out_path, group_by="EchoNumbers")[0]
 
                 assert out.is_identical(expected)
 
@@ -387,7 +391,7 @@ class TestDicomIO(ututils.TempPathMixin):
         """Test sorting by dicom attributes."""
         dp = ututils.SCAN_DIRPATHS[0]
         dicom_path = ututils.get_dicoms_path(dp)
-        vols = self.dr.load(dicom_path, sort_by="InstanceNumber")
+        vols = self.dr.load(dicom_path, sort_by="InstanceNumber", group_by="EchoNumbers")
 
         for v in vols:
             instance_numbers = [h.InstanceNumber for h in v.headers(flatten=True)]
@@ -398,7 +402,7 @@ class TestDicomIO(ututils.TempPathMixin):
         """Test sorting by dicom attributes before writing."""
         dp = ututils.get_scan_dirpath("qdess")
         dicom_path = ututils.get_dicoms_path(dp)
-        vols = self.dr.load(dicom_path)
+        vols = self.dr.load(dicom_path, group_by="EchoNumbers")
         vol = np.stack(vols)
 
         write_path = os.path.join(ututils.get_write_path(dp, self.data_format), "out-multi")
@@ -407,7 +411,8 @@ class TestDicomIO(ututils.TempPathMixin):
         files = [os.path.join(write_path, x) for x in sorted(os.listdir(write_path))]
         e1_files, e2_files = files[::2], files[1::2]
 
-        e1_vols, e2_vols = self.dr.load(e1_files), self.dr.load(e2_files)
+        e1_vols = self.dr.load(e1_files, group_by="EchoNumbers")
+        e2_vols = self.dr.load(e2_files, group_by="EchoNumbers")
         assert len(e1_vols) == len(e2_vols) == 1
         e1, e2 = e1_vols[0], e2_vols[0]
 
@@ -422,9 +427,8 @@ class TestDicomIO(ututils.TempPathMixin):
         fp = ututils.get_read_paths(dp, self.data_format)[0]
 
         dicom_path = ututils.get_dicoms_path(dp)
-        e1_expected = self.dr.load(dicom_path)[0]
-
-        e1 = self.dr.load(fp, group_by=None)[0]
+        e1_expected = self.dr.load(dicom_path, group_by="EchoNumbers")[0]
+        e1 = self.dr.load(fp, group_by=None)
 
         assert e1.is_identical(e1_expected)
 
@@ -435,9 +439,9 @@ class TestDicomIO(ututils.TempPathMixin):
         # Echo 1 only
         fp = ututils.get_read_paths(dp, self.data_format)[0]
 
-        e1_expected = self.dr.load(fp, group_by=None, sort_by="InstanceNumber", ignore_ext=False)[0]
+        e1_expected = self.dr.load(fp, group_by=None, sort_by="InstanceNumber", ignore_ext=False)
         dr = DicomReader(group_by=None, sort_by="InstanceNumber", ignore_ext=False)
-        e1 = dr.load(fp)[0]
+        e1 = dr.load(fp)
         e1_expected.orientation
 
         assert e1.is_identical(e1_expected)
@@ -457,8 +461,6 @@ class TestDicomIO(ututils.TempPathMixin):
 
         dr = DicomReader(group_by=None)
         mv = dr(filepath)
-        assert len(mv) == 1
-        mv = mv[0]
         assert mv.shape == (arr.shape) + (1,)
         assert self.are_equivalent_headers(mv.headers(flatten=True)[0], mv_pydicom)
 
@@ -474,7 +476,7 @@ class TestDicomIO(ututils.TempPathMixin):
     def test_load_pydicom_data(self):
         filepath = get_testdata_file("MR_small.dcm")
         dr = DicomReader(group_by=None)
-        mv = dr.load(filepath)[0]
+        mv = dr.load(filepath)
 
         # CT does not have EchoNumbers field in header.
         with self.assertRaises(KeyError):
@@ -484,27 +486,27 @@ class TestDicomIO(ututils.TempPathMixin):
 
         # Multiprocessing
         dr_mp = DicomReader(group_by=None, num_workers=1)
-        mv2 = dr_mp.load(filepath)[0]
+        mv2 = dr_mp.load(filepath)
         assert mv2.is_identical(mv)
 
         dr_mp = DicomReader(group_by=None, num_workers=1, verbose=True)
-        mv2 = dr_mp.load(filepath)[0]
+        mv2 = dr_mp.load(filepath)
         assert mv2.is_identical(mv)
 
         # sort by
-        mv2 = dr.load(filepath, sort_by="InstanceNumber")[0]
+        mv2 = dr.load(filepath, sort_by="InstanceNumber", group_by="EchoNumbers")[0]
         assert mv2.is_identical(mv)
 
         # bytes
         with open(filepath, "rb") as f:
-            mv2 = dr.load(f)[0]
+            mv2 = dr.load(f, group_by="EchoNumbers")[0]
         assert mv2.is_identical(mv)
 
     def test_save_different_bits(self):
         """Test writing volume where bit depth has changed."""
         filepath = get_testdata_file("MR_small.dcm")
         dr = DicomReader(group_by=None)
-        mv_base = dr.load(filepath)[0]
+        mv_base = dr.load(filepath)
 
         arr = (np.random.rand(*mv_base.shape) > 0.5).astype(np.uint8) * 255
         mv = mv_base._partial_clone(volume=arr)
@@ -514,18 +516,18 @@ class TestDicomIO(ututils.TempPathMixin):
         dw.save(mv, dir_path=out_dir)
 
         dr = DicomReader(group_by=None)
-        mv2 = dr.load(out_dir)[0]
+        mv2 = dr.load(out_dir)
         assert mv2.is_identical(mv)
 
     def test_save(self):
         filepath = get_testdata_file("MR_small.dcm")
         dr = DicomReader(group_by=None)
-        mv_base = dr.load(filepath)[0]
+        mv_base = dr.load(filepath)
 
         out_dir = os.path.join(self.data_dirpath, "test_save_sort_by")
         dw = DicomWriter()
         dw.save(mv_base, out_dir, sort_by="InstanceNumber")
-        mv2 = dr.load(out_dir)[0]
+        mv2 = dr.load(out_dir)
         assert mv2.is_identical(mv_base)
 
         out_dir = os.path.join(self.data_dirpath, "test_save_no_headers")

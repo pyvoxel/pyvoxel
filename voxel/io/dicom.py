@@ -79,7 +79,7 @@ class DicomReader(DataReader):
         self,
         num_workers: int = 0,
         verbose: bool = False,
-        group_by: Union[str, int, Sequence[Union[str, int]]] = "EchoNumbers",
+        group_by: Union[str, int, Sequence[Union[str, int]]] = None,
         sort_by: Union[str, int, Sequence[Union[str, int]]] = None,
         ignore_ext: bool = False,
         default_ornt: Tuple[str, str] = None,
@@ -149,7 +149,7 @@ class DicomReader(DataReader):
             exclude += ("^\.",)  # noqa: W605
 
         possible_files = os.listdir(path)
-        lstFilesDCM = []
+        lst_files_dicom = []
         for f in possible_files:
             # If ignore extension, don't look for '.dcm' extension.
             is_file = os.path.isfile(os.path.join(path, f))
@@ -160,10 +160,10 @@ class DicomReader(DataReader):
                 and (not include or any(re.match(x, f) for x in include))
                 and (not exclude or all(not re.match(x, f) for x in exclude))
             ):
-                lstFilesDCM.append(os.path.join(path, f))
+                lst_files_dicom.append(os.path.join(path, f))
 
-        lstFilesDCM = natsorted(lstFilesDCM)
-        return lstFilesDCM
+        lst_files_dicom = natsorted(lst_files_dicom)
+        return lst_files_dicom
 
     def _handle_files(self, path, ignore_ext):
         """Gets and organize pydicom data from file(s) or directory.
@@ -179,9 +179,9 @@ class DicomReader(DataReader):
         """
         if isinstance(path, str) or not isinstance(path, Sequence):
             if os.path.isdir(path):
-                lstFilesDCM = self.get_files(path, ignore_hidden=True, ignore_ext=ignore_ext)
+                lst_files_dicom = self.get_files(path, ignore_hidden=True, ignore_ext=ignore_ext)
             elif os.path.isfile(path):
-                lstFilesDCM = [path]
+                lst_files_dicom = [path]
             else:
                 raise IOError(f"No directory or file found - {path}")
         else:
@@ -190,13 +190,13 @@ class DicomReader(DataReader):
                 raise IOError(
                     "Files not found:\n{}".format("".join("\t{}\n".format(x) for x in not_files))
                 )
-            lstFilesDCM = path
+            lst_files_dicom = path
 
-        lstFilesDCM = natsorted(lstFilesDCM)
-        if len(lstFilesDCM) == 0:
+        lst_files_dicom = natsorted(lst_files_dicom)
+        if len(lst_files_dicom) == 0:
             raise FileNotFoundError("No valid dicom files found in {}".format(path))
 
-        return lstFilesDCM
+        return lst_files_dicom
 
     def load(
         self,
@@ -229,7 +229,8 @@ class DicomReader(DataReader):
                 Defaults to ``self.default_ornt``.
 
         Returns:
-            list[MedicalVolume]: Different volumes grouped by the `group_by` DICOM tag.
+            Union[List[MedicalVolume], MedicalVolume]: Different volumes grouped by the
+                `group_by` DICOM tag or a single volume if ``group_by`` is ``None``.
 
         Raises:
             ValueError: If `group_by` not specified or if single dicom file specified.
@@ -252,32 +253,32 @@ class DicomReader(DataReader):
         if isinstance(path_or_bytes, PATH_LIKE) or (
             isinstance(path_or_bytes, Sequence) and isinstance(path_or_bytes[0], PATH_LIKE)
         ):
-            lstFilesDCM = self._handle_files(path_or_bytes, ignore_ext)
+            lst_files_dicom = self._handle_files(path_or_bytes, ignore_ext)
         else:
             # We explicitly specify list/tuple because other objects can be sequences
             # (e.g. bytes) that we cannot thoroughly account for.
-            lstFilesDCM = (
+            lst_files_dicom = (
                 [path_or_bytes] if not isinstance(path_or_bytes, (list, tuple)) else path_or_bytes
             )
 
         if self.num_workers:
             fn = functools.partial(pydicom.read_file, force=True)
             if self.verbose:
-                dicom_slices = process_map(fn, lstFilesDCM, max_workers=self.num_workers)
+                dicom_slices = process_map(fn, lst_files_dicom, max_workers=self.num_workers)
             else:
                 with mp.Pool(self.num_workers) as p:
-                    dicom_slices = p.map(fn, lstFilesDCM)
+                    dicom_slices = p.map(fn, lst_files_dicom)
         else:
             dicom_slices = [
                 pydicom.read_file(fp, force=True)
-                for fp in tqdm(lstFilesDCM, disable=not self.verbose)
+                for fp in tqdm(lst_files_dicom, disable=not self.verbose)
             ]
 
         # Check if dicom file has the group_by element specified
         temp_dicom = dicom_slices[0]
         for _group in group_by:
             if _group not in temp_dicom:
-                raise KeyError("Tag {} does not exist in dicom".format(_group))
+                raise KeyError(f"Tag {_group} does not exist in dicom")
 
         if sort_by:
             try:
@@ -312,7 +313,7 @@ class DicomReader(DataReader):
             vol = MedicalVolume(arr, affine, headers=headers)
             vols.append(vol)
 
-        return vols
+        return vols if len(group_by) > 0 else vols[0]
 
     def __serializable_variables__(self) -> Collection[str]:
         return self.__dict__.keys()
