@@ -8,9 +8,10 @@ import numpy as np
 import pydicom
 from pydicom.data import get_testdata_file
 
-from voxel.io.dicom import DicomReader, DicomWriter, to_RAS_affine
+from voxel.io.dicom import DicomReader, DicomWriter
 from voxel.io.format_io import ImageDataFormat
 from voxel.med_volume import MedicalVolume
+from voxel.orientation import to_RAS_affine
 
 from .. import util as ututils
 
