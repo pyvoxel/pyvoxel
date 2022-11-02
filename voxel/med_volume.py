@@ -968,7 +968,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
     def materialize(self):
         if not self.is_mmap:
-            return self
+            return self[:]
 
     def round(self, decimals=0, affine=False) -> "MedicalVolume":
         """Round array (and optionally affine matrix).
