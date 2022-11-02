@@ -1374,7 +1374,12 @@ class MedicalVolume(NDArrayOperatorsMixin):
         default_ornt: Tuple[str, str] = np._NoValue,
         **kwargs,
     ) -> "MedicalVolume":
-        """Constructs MedicalVolume from zarr arrays.
+        """Construct a MedicalVolume from a Zarr store.
+
+        This method safely opens a Zarr store and lazily loads the associated volume. The affine
+        matrix and headers can be opened through the ``affine_attr`` and ``headers_attr``, if
+        applicable.
+
         Args:
             store (Union[MutableMapping, str]): A zarr store.
             affine_attr (str, optional): Attribute key from the Zarr array where the affine matrix
@@ -1383,8 +1388,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 `MedicalVolume` from. If `None`, headers will not be retrieved.
             default_ornt (Tuple[str, str], optional): See `MedicalVolume` class parameters.
             **kwargs: Additional parameters are passed along to `zarr.creation.open_array`.
+
         Returns:
             MedicalVolume: The medical image.
+
         Examples:
             >>> # load a zarr array from disk
             >>> store = zarr.ZipStore("/path/to/store")
