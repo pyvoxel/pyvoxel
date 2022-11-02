@@ -16,6 +16,7 @@ import pydicom
 from nibabel.spatialimages import SpatialFirstSlicer as _SpatialFirstSlicerNib
 from numpy.lib.mixins import NDArrayOperatorsMixin
 from packaging import version
+from pydicom import Dataset
 
 import voxel as vx
 import voxel.orientation as stdo
@@ -1307,6 +1308,70 @@ class MedicalVolume(NDArrayOperatorsMixin):
         elif isinstance(kwargs["headers"], bool) and kwargs["headers"]:
             kwargs["headers"] = deepcopy(self._headers)
         return self.__class__(**kwargs)
+
+    @classmethod
+    def from_zarr(
+        cls,
+        store,
+        mode="r",
+        affine: np.ndarray = None,
+        affine_attr: str = None,
+        headers_attr: str = None,
+        default_ornt: Tuple[str, str] = np._NoValue,
+        **kwargs,
+    ) -> "MedicalVolume":
+        """Constructs MedicalVolume from zarr arrays.
+        Args:
+            store (MutableMapping or string):
+                Store or path to directory in file system or name of zip file.
+            mode ({'r', 'r+', 'a', 'w', 'w-'}, optional): Persistence mode: 'r' means read only
+                (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if
+                doesn't exist); 'w' means create (overwrite if exists); 'w-' means create (fail if
+                exists). Defaults to _r_ for safety reasons.
+            affine (array-like): See `MedicalVolume` class parameters.
+            affine_attr (str, optional): Attribute key from the Zarr Array where the affine matrix
+                is stored in.
+            headers_attr (str, optional): Attribute key to retrieve the headers of the
+                `MedicalVolume` from. If `None`, headers will not be retrieved.
+            default_ornt (Tuple[str, str], optional): See `MedicalVolume` class parameters.
+            **kwargs: Additional parameters are passed through to `zarr.creation.open_array`.
+        Returns:
+            MedicalVolume: The medical image.
+        Examples:
+            >>> import zarr
+            >>> store = zarr.ZipStore('/path/to/store')
+            >>> zarr.save_array(store, np.zeros((10, 10)))
+            >>> MedicalVolume.from_zarr(store)
+        """
+
+        if not env.package_available("zarr"):
+            raise ImportError(  # pragma: no cover
+                "zarr is not installed. Install it with `pip install zarr`. "
+            )
+
+        import zarr
+
+        arr = zarr.open_array(store, mode, **kwargs)
+        headers = None
+
+        if headers_attr is not None:
+            zarr_header = arr.attrs.get(headers_attr, None)
+            if zarr_header is None:
+                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
+
+            headers = [Dataset.from_json(h) for h in zarr_header]
+
+        if affine_attr is not None:
+            if affine_attr not in arr.attrs:
+                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
+
+            affine = np.array(arr.attrs.get(affine_attr)).reshape(4, 4)
+        # elif affine is None and len(headers) > 1:
+        #     affine = to_RAS_affine(headers, default_ornt)
+        else:
+            affine = np.eye(4)
+
+        return cls(arr, affine, headers)
 
     def _validate_and_format_headers(self, headers):
         """Validate headers are of appropriate shape and format into standardized shape.
