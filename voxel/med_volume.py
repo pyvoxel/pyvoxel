@@ -644,6 +644,64 @@ class MedicalVolume(NDArrayOperatorsMixin):
             tensor = tensor.contiguous()
         return tensor
 
+    def to_zarr(
+        self,
+        affine_attr: str = None,
+        headers_attr: str = None,
+        read_only: bool = True,
+        **kwargs,
+    ):
+        """Converts a `MedicalVolume` to a Zarr array/store.
+
+        Zarr stores can be used to store and access data on disk or in memory. The `store` argument
+        can be set to persist the data to disk. See `zarr.open_array` for more information. The
+        `affine` and `headers` attributes of `MedicalVolume` are stored as Zarr attributes. To do
+        so, the DICOM headers are serialized to DICOM+JSON format.
+
+        The default `mode` is set to `w-` to prevent overwriting existing data. If you want to
+        overwrite existing data, set `mode` to `w`.
+
+        Args:
+            affine_attr (str, optional): Attribute key of the Zarr Array where the affine matrix
+                will be stored in. If `None`, the affine matrix will not be saved.
+            headers_attr (str, optional): Attribute key of the Zarr Array where the headers of the
+                `MedicalVolume` will be stored in. If `None`, headers will not be saved.
+            read_only (bool, optional): If `True`, the returned Zarr store will be read-only.
+            **kwargs: Additional parameters passed to `zarr.creation.open_array`.
+        Returns:
+            zarr.Array
+        Examples:
+            >>> mv = vx.load("path/to/dicoms")
+            >>> store = zarr.DirectoryStore("/path/to/store")
+            >>> mv.to_zarr(store=store)
+
+            >>> # Save headers to zarr attributes
+            >>> mv.to_zarr(store=store, headers_attr="headers")
+
+            >>> # Load with headers
+            >>> MedicalVolume.from_zarr(store, headers_attr="headers")
+        """
+
+        if not env.package_available("zarr"):
+            raise ImportError(  # pragma: no cover
+                "zarr is not installed. Install it with `pip install zarr`. "
+            )
+
+        import zarr
+
+        arr = zarr.open_array(**{"mode": "w-", **kwargs, "shape": self.shape, "dtype": self.dtype})
+        arr[:] = self._volume
+
+        if affine_attr is not None:
+            arr.attrs[affine_attr] = self.affine.tolist()
+
+        if headers_attr is not None:
+            json_headers = [h.to_json_dict() for h in self._headers.flatten().tolist()]
+            arr.attrs[headers_attr] = json_headers
+
+        arr.read_only = read_only
+        return arr
+
     def headers(self, flatten=False):
         """Returns headers.
 
@@ -768,7 +826,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         h = self.headers(flatten=True)[0]
         if "RescaleSlope" not in h or "RescaleIntercept" not in h:
-            raise ValueError("RescaleSlope and RescaleIntercept must be in header.")
+            raise KeyError("RescaleSlope and RescaleIntercept must be in header.")
 
         mv = self if inplace else self.clone()
         mv = mv.astype("float64")
@@ -776,8 +834,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
         mv._volume += float(h.RescaleIntercept)
 
         if sync:
-            mv.set_metadata("RescaleSlope", "1.0")
-            mv.set_metadata("RescaleIntercept", "0.0")
+            mv.set_metadata("RescaleSlope", 1.0)
+            mv.set_metadata("RescaleIntercept", 0.0)
 
         return mv
 
@@ -797,7 +855,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         h = self.headers(flatten=True)[0]
         if "ModalityLUTSequence" not in h:
-            raise ValueError("Modality LUT Sequence must be defined in header.")
+            raise KeyError("Modality LUT Sequence must be defined in header.")
 
         xp = self.device.xp
         mv = self if inplace else self.clone()
@@ -819,10 +877,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
         if lut.LUTData.VR == "OW":
             lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
 
-        # parse the LUTData into a numpy array
+        # Parse the LUTData into a numpy array, and convert all pixel values into LUT indices.
         lut_data = xp.frombuffer(bytearray(lut.LUTData.value), dtype=lut_dtype)
-
-        # convert all pixel values into LUT indices
         lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
         mapped_pixels = self._volume >= first_mapped
         lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
@@ -831,8 +887,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         if sync:
             mv._del_metadata("ModalityLUTSequence")
-            mv.set_metadata("RescaleSlope", "1.0", force=True)
-            mv.set_metadata("RescaleIntercept", "0.0", force=True)
+            mv.set_metadata("RescaleSlope", 1.0, force=True)
+            mv.set_metadata("RescaleIntercept", 0.0, force=True)
 
         return mv
 
@@ -854,10 +910,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
         mv = self if inplace else self.clone()
 
         if "WindowCenter" not in h or "WindowWidth" not in h:
-            raise ValueError("Window Center and Window Width must be present in headers.")
+            raise KeyError("Window Center and Window Width must be present in headers.")
 
         if "RescaleIntercept" in h and "ModalityLUTSequence" in h:
-            raise ValueError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
+            raise KeyError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
 
         wc = h["WindowCenter"]
         wc = wc.value[index] if wc.VM > 1 else wc.value
@@ -1313,8 +1369,6 @@ class MedicalVolume(NDArrayOperatorsMixin):
     def from_zarr(
         cls,
         store,
-        mode="r",
-        affine: np.ndarray = None,
         affine_attr: str = None,
         headers_attr: str = None,
         default_ornt: Tuple[str, str] = np._NoValue,
@@ -1322,26 +1376,25 @@ class MedicalVolume(NDArrayOperatorsMixin):
     ) -> "MedicalVolume":
         """Constructs MedicalVolume from zarr arrays.
         Args:
-            store (MutableMapping or string):
-                Store or path to directory in file system or name of zip file.
-            mode ({'r', 'r+', 'a', 'w', 'w-'}, optional): Persistence mode: 'r' means read only
-                (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if
-                doesn't exist); 'w' means create (overwrite if exists); 'w-' means create (fail if
-                exists). Defaults to _r_ for safety reasons.
-            affine (array-like): See `MedicalVolume` class parameters.
-            affine_attr (str, optional): Attribute key from the Zarr Array where the affine matrix
-                is stored in.
+            store (Union[MutableMapping, str]): A zarr store.
+            affine_attr (str, optional): Attribute key from the Zarr array where the affine matrix
+                is stored in. If `None`, then the affine matrix is assumed to be the identity.
             headers_attr (str, optional): Attribute key to retrieve the headers of the
                 `MedicalVolume` from. If `None`, headers will not be retrieved.
             default_ornt (Tuple[str, str], optional): See `MedicalVolume` class parameters.
-            **kwargs: Additional parameters are passed through to `zarr.creation.open_array`.
+            **kwargs: Additional parameters are passed along to `zarr.creation.open_array`.
         Returns:
             MedicalVolume: The medical image.
         Examples:
-            >>> import zarr
-            >>> store = zarr.ZipStore('/path/to/store')
+            >>> # load a zarr array from disk
+            >>> store = zarr.ZipStore("/path/to/store")
             >>> zarr.save_array(store, np.zeros((10, 10)))
             >>> MedicalVolume.from_zarr(store)
+
+            >>> # load zarr array, affine matrix, and headers
+            >>> mv = vx.load("path/to/dicoms")
+            >>> mv.to_zarr(store=store, affine_attr="affine", headers_attr="headers")
+            >>> MedicalVolume.from_zarr(store=store, affine_attr="affine", headers_attr="headers")
         """
 
         if not env.package_available("zarr"):
@@ -1351,25 +1404,27 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         import zarr
 
-        arr = zarr.open_array(store, mode, **kwargs)
-        headers = None
+        arr = zarr.open_array(store, **{"mode": "r", **kwargs})
 
+        # Determine if DICOM+JSON headers are stored in the zarr array. If so, retrieve them and
+        # convert them back to a list of pydicom.Dataset instances.
+        headers, affine = None, np.eye(4)
         if headers_attr is not None:
             zarr_header = arr.attrs.get(headers_attr, None)
             if zarr_header is None:
-                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
-
+                raise KeyError(f"Attribute `{headers_attr}` does not exist on the zarr.Array.")
             headers = [Dataset.from_json(h) for h in zarr_header]
 
+        # Determine if the affine matrix is stored in the zarr array. If so, retrieve it, else
+        # try to infer it from the headers. If no headers are available, use the identity matrix.
         if affine_attr is not None:
             if affine_attr not in arr.attrs:
-                raise KeyError(f"Attribute `{headers_attr}` does not exist on this zarr.Array.")
-
+                raise KeyError(f"Attribute `{affine_attr}` does not exist on the zarr.Array.")
             affine = np.array(arr.attrs.get(affine_attr)).reshape(4, 4)
-        # elif affine is None and len(headers) > 1:
-        #     affine = to_RAS_affine(headers, default_ornt)
-        else:
-            affine = np.eye(4)
+            return cls(arr, affine, headers)
+
+        if headers is not None:
+            affine = stdo.to_RAS_affine(headers, default_ornt)
 
         return cls(arr, affine, headers)
 

@@ -151,7 +151,7 @@ class TestMedicalVolume(unittest.TestCase):
         with self.assertRaises((RuntimeError)):
             mv_no_headers.apply_rescale()
 
-        with self.assertRaises((ValueError)):
+        with self.assertRaises((KeyError)):
             mv_incorrect_headers.apply_rescale()
 
         assert np.allclose(mv.apply_rescale()._volume, volume * 2.5 + 1.0)
@@ -187,7 +187,7 @@ class TestMedicalVolume(unittest.TestCase):
         with self.assertRaises((RuntimeError)):
             mv_no_headers.apply_modality_lut()
 
-        with self.assertRaises((ValueError)):
+        with self.assertRaises((KeyError)):
             mv_incorrect_headers.apply_modality_lut()
 
         # test modality lut
@@ -210,7 +210,7 @@ class TestMedicalVolume(unittest.TestCase):
         mv_inplace = mv.apply_modality_lut(inplace=True, sync=True)
         assert mv_inplace is mv
 
-        with self.assertRaises((ValueError)):
+        with self.assertRaises((KeyError)):
             mv_inplace.apply_modality_lut()
 
     def test_apply_window(self):
@@ -230,7 +230,7 @@ class TestMedicalVolume(unittest.TestCase):
         with self.assertRaises((RuntimeError)):
             mv_no_headers.apply_window()
 
-        with self.assertRaises((ValueError)):
+        with self.assertRaises((KeyError)):
             mv_incorrect_headers.apply_window()
 
         # test VOILUTFunction linear
@@ -698,6 +698,55 @@ class TestMedicalVolume(unittest.TestCase):
         tensor = torch.ones(10, 20, 30, 3, dtype=torch.float64)
         with self.assertRaises(ValueError):
             mv = MedicalVolume.from_torch(tensor, self._AFFINE, to_complex=True)
+
+    @ututils.requires_packages("zarr")
+    def test_to_zarr(self):
+        import zarr
+
+        vol = np.ones((10, 20, 30))
+        mv = MedicalVolume(vol, self._AFFINE)
+        arr = mv.to_zarr(read_only=True)
+
+        assert np.array_equal(arr, vol)
+        with self.assertRaises(zarr.errors.ReadOnlyError):
+            arr[0, 0, 0] = 2
+
+        aff = np.eye(4) * 2
+        mv_aff = MedicalVolume(vol, aff)
+        arr = mv_aff.to_zarr(affine_attr="affine")
+        assert np.array_equal(np.array(arr.attrs["affine"]), aff)
+
+        arr = mv_aff.to_zarr()
+        with self.assertRaises(KeyError):
+            arr.attrs["affine"]
+
+        filepath = pydd.get_testdata_file("CT_small.dcm")
+        dr = DicomReader()
+        mv_hdr = dr.load(filepath)
+        arr = mv_hdr.to_zarr(headers_attr="headers")
+        assert "headers" in arr.attrs
+
+    @ututils.requires_packages("zarr")
+    def test_from_zarr(self):
+        import zarr
+
+        filepath = pydd.get_testdata_file("CT_small.dcm")
+        dr = DicomReader()
+        mv_hdr = dr.load(filepath)
+
+        store = zarr.MemoryStore()
+        arr = mv_hdr.to_zarr(store=store, affine_attr="affine", headers_attr="headers")
+        assert arr.read_only
+
+        # load without attributes
+        mv = MedicalVolume.from_zarr(store=store)
+        assert np.array_equal(mv.affine, np.eye(4))
+        assert mv.headers() is None
+
+        # load with attributes
+        mv = MedicalVolume.from_zarr(store=store, affine_attr="affine", headers_attr="headers")
+        assert np.array_equal(mv.affine, mv_hdr.affine)
+        assert mv.headers() == mv_hdr.headers()
 
     def test_indexing(self):
         # Index medical volume with another medical volume.
