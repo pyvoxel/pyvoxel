@@ -1489,14 +1489,13 @@ class MedicalVolume(NDArrayOperatorsMixin):
         sign = "u" if h.PixelRepresentation == 0 else "i"
         lut_dtype = f"<{sign}{bits // 8}"
 
-        if bits / 8 * entries != len(lut.LUTData.value):
-            raise ValueError("LUTData byte length does not match LUTDescriptor.")
-
-        if lut.LUTData.VR == "OW":
+        if lut["LUTData"].VR == "OW":
             lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
+            lut_data = xp.frombuffer(bytearray(lut["LUTData"].value), dtype=lut_dtype)
+        else:
+            lut_data = xp.array(lut["LUTData"].value, dtype=lut_dtype)
 
-        # Parse the LUTData into a numpy array, and convert all pixel values into LUT indices.
-        lut_data = xp.frombuffer(bytearray(lut.LUTData.value), dtype=lut_dtype)
+        # Convert all pixel values into LUT indices.
         lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
         mapped_pixels = self._volume >= first_mapped
         lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
