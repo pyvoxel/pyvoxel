@@ -796,21 +796,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             else:
                 h[key].value = value
 
-    def _del_metadata(self, key):
-        """Deletes metadata for all headers.
-
-        Args:
-            key (str or pydicom.BaseTag): Metadata field to access.
-
-        Raises:
-            RuntimeError: If ``self._headers`` is ``None``.
-        """
-        if self._headers is None:
-            raise RuntimeError("No headers found. MedicalVolume must be initialized with `headers`")
-        for h in self.headers(flatten=True):
-            del h[key]
-
-    def apply_rescale(self, inplace: bool = False, sync: bool = True):
+    def apply_rescale(self, inplace: bool = False, sync: bool = True) -> "MedicalVolume":
         """Applies rescale to volume.
 
         Args:
@@ -821,15 +807,19 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             MedicalVolume: Volume with rescale applied.
         """
-        if self._headers is None:
-            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
+        headers = self.headers(flatten=True)
+        if headers is None:
+            warnings.warn("No headers found. Cannot apply rescale.")
+            return self
 
-        h = self.headers(flatten=True)[0]
+        h = headers[0]
         if "RescaleSlope" not in h or "RescaleIntercept" not in h:
-            raise KeyError("RescaleSlope and RescaleIntercept must be in header.")
+            warnings.warn("RescaleSlope or RescaleIntercept not found in headers.")
+            return self
 
         mv = self if inplace else self.clone()
         mv = mv.astype("float64")
+
         mv._volume *= float(h.RescaleSlope)
         mv._volume += float(h.RescaleIntercept)
 
@@ -839,7 +829,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         return mv
 
-    def apply_modality_lut(self, inplace: bool = False, sync: bool = True):
+    def apply_modality_lut(self, inplace: bool = False, sync: bool = True) -> "MedicalVolume":
         """Applies modality LUT to volume.
 
         Args:
@@ -847,44 +837,21 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 Otherwise, returns a new MedicalVolume.
             sync (bool, optional): If ``True``, updates the headers.
 
-        Raises:
-            RuntimeError: If ``self._headers`` is ``None``.
+        Returns:
+            MedicalVolume: Volume with modality LUT applied.
         """
-        if self._headers is None:
-            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
 
-        h = self.headers(flatten=True)[0]
+        headers = self.headers(flatten=True)
+        if headers is None:
+            warnings.warn("No headers found. Cannot apply modality LUT.")
+            return self
+
+        h = headers[0]
         if "ModalityLUTSequence" not in h:
-            raise KeyError("Modality LUT Sequence must be defined in header.")
+            warnings.warn("No ModalityLUTSequence found. Cannot apply modality LUT.")
+            return self
 
-        xp = self.device.xp
-        mv = self if inplace else self.clone()
-
-        lut = h.ModalityLUTSequence[0]
-        entries = lut.LUTDescriptor[0] if lut.LUTDescriptor[0] > 0 else 2**16
-        first_mapped = lut.LUTDescriptor[1]
-
-        bits = lut.LUTDescriptor[2]
-        if bits not in [8, 16]:
-            raise ValueError("Bits in the LUTDescriptor must be 8 or 16.")
-
-        sign = "u" if h.PixelRepresentation == 0 else "i"
-        lut_dtype = f"<{sign}{bits // 8}"
-
-        if bits / 8 * entries != len(lut.LUTData.value):
-            raise ValueError("LUTData byte length does not match LUTDescriptor.")
-
-        if lut.LUTData.VR == "OW":
-            lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
-
-        # Parse the LUTData into a numpy array, and convert all pixel values into LUT indices.
-        lut_data = xp.frombuffer(bytearray(lut.LUTData.value), dtype=lut_dtype)
-        lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
-        mapped_pixels = self._volume >= first_mapped
-        lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
-        xp.clip(lut_idxs, 0, entries - 1, out=lut_idxs)
-        mv._volume = lut_data[lut_idxs]
-
+        mv = self._apply_lut(h["ModalityLUTSequence"][0], inplace=inplace)
         if sync:
             mv._del_metadata("ModalityLUTSequence")
             mv.set_metadata("RescaleSlope", 1.0, force=True)
@@ -892,7 +859,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         return mv
 
-    def apply_window(self, index: int = 0, inplace: bool = False):
+    def apply_window(self, index: int = 0, inplace: bool = False) -> "MedicalVolume":
         """Applies window to volume.
 
         Args:
@@ -902,18 +869,21 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             ``MedicalVolume`` with window applied.
         """
-        if self._headers is None:
-            raise RuntimeError("MedicalVolume must be initialized with `headers.`")
+        headers = self.headers(flatten=True)
+        if headers is None:
+            warnings.warn("No headers found. Cannot apply window.")
+            return self
 
-        h = self.headers(flatten=True)[0]
-        xp = self.device.xp
-        mv = self if inplace else self.clone()
-
+        h = headers[0]
         if "WindowCenter" not in h or "WindowWidth" not in h:
-            raise KeyError("Window Center and Window Width must be present in headers.")
+            warnings.warn("WindowCenter or WindowWidth not found. Cannot apply window.")
+            return self
 
         if "RescaleIntercept" in h and "ModalityLUTSequence" in h:
-            raise KeyError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
+            raise ValueError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
+
+        xp = self.device.xp
+        mv = self if inplace else self.clone()
 
         wc = h["WindowCenter"]
         wc = wc.value[index] if wc.VM > 1 else wc.value
@@ -965,6 +935,28 @@ class MedicalVolume(NDArrayOperatorsMixin):
             raise ValueError(f"VOILUTFunction {voi_func} is not supported.")
 
         return mv
+
+    def apply_voi_lut(self, index: int = 0, inplace: bool = False) -> "MedicalVolume":
+        """Applies VOI LUT to volume.
+
+        Args:
+            index (int, optional): Index of VOI LUT to apply.
+            inplace (bool, optional): If ``True``, applies VOI LUT in place.
+
+        Returns:
+            ``MedicalVolume`` with VOI LUT applied.
+        """
+        headers = self.headers(flatten=True)
+        if headers is None:
+            warnings.warn("No headers found. Cannot apply VOI LUT.")
+            return self
+
+        h = headers[0]
+        if "VOILUTSequence" not in h:
+            warnings.warn("No VOILUTSequence found. Cannot apply VOI LUT.")
+            return self
+
+        return self._apply_lut(h["VOILUTSequence"][index], inplace=inplace)
 
     def materialize(self):
         if not self.is_mmap:
@@ -1460,6 +1452,57 @@ class MedicalVolume(NDArrayOperatorsMixin):
         shape = (1,) * (ndim - len(headers.shape)) + headers.shape
         headers = np.reshape(headers, shape)
         return headers
+
+    def _del_metadata(self, key: Union[str, pydicom.BaseTag]):
+        """Deletes metadata for all headers.
+
+        Args:
+            key (str or pydicom.BaseTag): Metadata field to access.
+        """
+        headers = self.headers(flatten=True)
+        if headers is not None:
+            for h in headers:
+                del h[key]
+
+    def _apply_lut(self, lut: pydicom.Dataset, inplace: bool = False) -> "MedicalVolume":
+        """Applies a LUT to the volume.
+
+        Args:
+            lut (pydicom.Dataset): LUT dataset.
+            inplace (bool, optional): If ``True``, applies LUT inplace.
+
+        Returns:
+            ``MedicalVolume`` with a LUT applied.
+        """
+        h = self._headers.flatten()[0]
+        xp = self.device.xp
+        mv = self if inplace else self.clone()
+
+        entries = lut.LUTDescriptor[0] if lut.LUTDescriptor[0] > 0 else 2**16
+        first_mapped = lut.LUTDescriptor[1]
+
+        bits = lut.LUTDescriptor[2]
+        if bits not in [8, 16]:
+            raise ValueError("Bits in the LUTDescriptor must be 8 or 16.")
+
+        sign = "u" if h.PixelRepresentation == 0 else "i"
+        lut_dtype = f"<{sign}{bits // 8}"
+
+        if bits / 8 * entries != len(lut.LUTData.value):
+            raise ValueError("LUTData byte length does not match LUTDescriptor.")
+
+        if lut.LUTData.VR == "OW":
+            lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
+
+        # Parse the LUTData into a numpy array, and convert all pixel values into LUT indices.
+        lut_data = xp.frombuffer(bytearray(lut.LUTData.value), dtype=lut_dtype)
+        lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
+        mapped_pixels = self._volume >= first_mapped
+        lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
+        xp.clip(lut_idxs, 0, entries - 1, out=lut_idxs)
+        mv._volume = lut_data[lut_idxs]
+
+        return mv
 
     def _extract_input_array_ufunc(self, input, device=None):
         if device is None:

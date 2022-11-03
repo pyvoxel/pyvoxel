@@ -148,11 +148,11 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
         mv = MedicalVolume(volume, self._AFFINE, headers=headers)
 
-        with self.assertRaises((RuntimeError)):
-            mv_no_headers.apply_rescale()
+        mv_unchanged = mv_no_headers.apply_modality_lut()
+        assert mv_unchanged.is_identical(mv_no_headers)
 
-        with self.assertRaises((KeyError)):
-            mv_incorrect_headers.apply_rescale()
+        mv_unchanged = mv_incorrect_headers.apply_window()
+        assert mv_unchanged.is_identical(mv_incorrect_headers)
 
         assert np.allclose(mv.apply_rescale()._volume, volume * 2.5 + 1.0)
 
@@ -184,11 +184,11 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers=[pydicom.Dataset()])
         mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
 
-        with self.assertRaises((RuntimeError)):
-            mv_no_headers.apply_modality_lut()
+        mv_unchanged = mv_no_headers.apply_modality_lut()
+        assert mv_unchanged.is_identical(mv_no_headers)
 
-        with self.assertRaises((KeyError)):
-            mv_incorrect_headers.apply_modality_lut()
+        mv_unchanged = mv_incorrect_headers.apply_modality_lut()
+        assert mv_unchanged.is_identical(mv_incorrect_headers)
 
         # test modality lut
         correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
@@ -210,9 +210,6 @@ class TestMedicalVolume(unittest.TestCase):
         mv_inplace = mv.apply_modality_lut(inplace=True, sync=True)
         assert mv_inplace is mv
 
-        with self.assertRaises((KeyError)):
-            mv_inplace.apply_modality_lut()
-
     def test_apply_window(self):
         volume = np.arange(9, dtype=np.uint8).reshape(3, 3, 1)
         ds = pydicom.Dataset()
@@ -227,11 +224,11 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
         mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
 
-        with self.assertRaises((RuntimeError)):
-            mv_no_headers.apply_window()
+        mv_unchanged = mv_no_headers.apply_modality_lut()
+        assert mv_unchanged.is_identical(mv_no_headers)
 
-        with self.assertRaises((KeyError)):
-            mv_incorrect_headers.apply_window()
+        mv_unchanged = mv_incorrect_headers.apply_window()
+        assert mv_unchanged.is_identical(mv_incorrect_headers)
 
         # test VOILUTFunction linear
         correct_linear = np.array([0, 0, 0, 42.5, 127.5, 212.5, 255, 255, 255])
@@ -248,6 +245,57 @@ class TestMedicalVolume(unittest.TestCase):
         ds.ModalityLUTSequence.append(lut)
         lut.LUTDescriptor = [4, 2, 16]  # entries, first mapped, bits
         assert mv.apply_window()._volume.max() == 2**16 - 1
+
+    def test_apply_voi_lut(self):
+        ds = pydicom.Dataset()
+        lut1 = pydicom.Dataset()
+        lut2 = pydicom.Dataset()
+        lut_data_little_endian = bytearray([10, 0, 11, 0, 12, 0, 13, 0])
+        lut_data_big_endian = bytearray([0, 10, 0, 11, 0, 12, 0, 13])
+
+        ds.PixelRepresentation = 1
+        ds.VOILUTSequence = pydicom.Sequence()
+        ds.VOILUTSequence.extend([lut1, lut2])
+
+        # VOILUTSequence can contain multiple LUTs
+        lut1.LUTDescriptor = [4, 2, 16]  # entries, first mapped, bits
+        lut1.LUTExplanation = "Test1"
+        lut2.LUTDescriptor = [4, 2, 16]  # entries, first mapped, bits
+        lut2.LUTExplanation = "Test2"
+
+        ds.RescaleIntercept = "0"
+        ds.RescaleSlope = "1"
+
+        volume = np.arange(9, dtype=np.uint16).reshape(3, 3, 1)
+        mv_no_headers = MedicalVolume(volume, self._AFFINE)
+        mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers=[pydicom.Dataset()])
+        mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
+
+        mv_unchanged = mv_no_headers.apply_voi_lut()
+        assert mv_unchanged.is_identical(mv_no_headers)
+
+        mv_unchanged = mv_incorrect_headers.apply_voi_lut()
+        assert mv_unchanged.is_identical(mv_incorrect_headers)
+
+        # test modality lut1
+        correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
+        correct_i16 = np.array(correct, dtype=np.int16).reshape(3, 3, 1)
+        correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
+
+        # test little endian
+        lut1.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        mv_little_endian = mv.apply_voi_lut()
+        assert np.allclose(mv_little_endian._volume, correct_i16)
+
+        # test big endian
+        lut1.LUTData = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
+        mv_big_endian = mv.apply_voi_lut()
+        assert np.allclose(mv_big_endian._volume, correct_u8)
+
+        # test modality lut2
+        lut2.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        mv_lut2 = mv.apply_voi_lut(index=1)
+        assert np.allclose(mv_lut2._volume, correct_u8)
 
     def test_clone(self):
         mv = MedicalVolume(np.random.rand(10, 20, 30), self._AFFINE)
