@@ -192,13 +192,7 @@ class TestMedicalVolume(unittest.TestCase):
 
         # test modality lut
         correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
-        correct_i16 = np.array(correct, dtype=np.int16).reshape(3, 3, 1)
         correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
-
-        # test little endian
-        lut["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
-        mv_little_endian = mv.apply_modality_lut()
-        assert np.allclose(mv_little_endian._volume, correct_i16)
 
         # test big endian
         lut["LUTData"] = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
@@ -206,7 +200,7 @@ class TestMedicalVolume(unittest.TestCase):
         assert np.allclose(mv_big_endian._volume, correct_u8)
 
         # test sync and inplace
-        lut["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        lut["LUTData"] = pydicom.DataElement("LUTData", "OW", lut_data_little_endian)
         mv_inplace = mv.apply_modality_lut(inplace=True, sync=True)
         assert mv_inplace is mv
 
@@ -250,7 +244,7 @@ class TestMedicalVolume(unittest.TestCase):
         ds = pydicom.Dataset()
         lut1 = pydicom.Dataset()
         lut2 = pydicom.Dataset()
-        lut_data_little_endian = bytearray([10, 0, 11, 0, 12, 0, 13, 0])
+        lut_data_little_endian = bytearray([10, 11, 12, 13])
         lut_data_big_endian = bytearray([0, 10, 0, 11, 0, 12, 0, 13])
 
         ds.PixelRepresentation = 1
@@ -279,13 +273,7 @@ class TestMedicalVolume(unittest.TestCase):
 
         # test modality lut1
         correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
-        correct_i16 = np.array(correct, dtype=np.int16).reshape(3, 3, 1)
         correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
-
-        # test little endian
-        lut1["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
-        mv_little_endian = mv.apply_voi_lut()
-        assert np.allclose(mv_little_endian._volume, correct_i16)
 
         # test big endian
         lut1["LUTData"] = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
