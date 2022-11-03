@@ -196,17 +196,17 @@ class TestMedicalVolume(unittest.TestCase):
         correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
 
         # test little endian
-        lut.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        lut["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
         mv_little_endian = mv.apply_modality_lut()
         assert np.allclose(mv_little_endian._volume, correct_i16)
 
         # test big endian
-        lut.LUTData = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
+        lut["LUTData"] = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
         mv_big_endian = mv.apply_modality_lut()
         assert np.allclose(mv_big_endian._volume, correct_u8)
 
         # test sync and inplace
-        lut.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        lut["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
         mv_inplace = mv.apply_modality_lut(inplace=True, sync=True)
         assert mv_inplace is mv
 
@@ -283,17 +283,17 @@ class TestMedicalVolume(unittest.TestCase):
         correct_u8 = np.array(correct, dtype=np.uint8).reshape(3, 3, 1)
 
         # test little endian
-        lut1.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        lut1["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
         mv_little_endian = mv.apply_voi_lut()
         assert np.allclose(mv_little_endian._volume, correct_i16)
 
         # test big endian
-        lut1.LUTData = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
+        lut1["LUTData"] = pydicom.DataElement("LUTData", "OW", lut_data_big_endian)
         mv_big_endian = mv.apply_voi_lut()
         assert np.allclose(mv_big_endian._volume, correct_u8)
 
         # test modality lut2
-        lut2.LUTData = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
+        lut2["LUTData"] = pydicom.DataElement("LUTData", "US", lut_data_little_endian)
         mv_lut2 = mv.apply_voi_lut(index=1)
         assert np.allclose(mv_lut2._volume, correct_u8)
 
