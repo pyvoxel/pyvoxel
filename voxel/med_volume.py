@@ -1488,9 +1488,6 @@ class MedicalVolume(NDArrayOperatorsMixin):
         sign = "u" if h.PixelRepresentation == 0 else "i"
         lut_dtype = f"<{sign}{bits // 8}"
 
-        if bits / 8 * entries != len(lut["LUTData"].value):
-            raise ValueError("LUTData byte length does not match LUTDescriptor.")
-
         if lut["LUTData"].VR == "OW":
             lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
 
