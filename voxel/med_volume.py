@@ -1481,9 +1481,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
         entries = lut.LUTDescriptor[0] if lut.LUTDescriptor[0] > 0 else 2**16
         first_mapped = lut.LUTDescriptor[1]
 
-        bits = lut.LUTDescriptor[2]
+        bits = int(lut.LUTDescriptor[2])
+        bits = 16 if bits in range(9, 16) else bits
         if bits not in [8, 16]:
-            raise ValueError("Bits in the LUTDescriptor must be 8 or 16.")
+            raise ValueError(f"Unsupported LUT bit depth: {bits}.")
 
         sign = "u" if h.PixelRepresentation == 0 else "i"
         lut_dtype = f"<{sign}{bits // 8}"
