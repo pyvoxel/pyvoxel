@@ -16,6 +16,7 @@ from voxel.io.format_io import ImageDataFormat
 from voxel.io.nifti import NiftiReader, NiftiWriter
 from voxel.med_volume import MedicalVolume
 from voxel.utils import env
+from voxel.utils.logger import setup_logger
 
 from . import util as ututils
 
@@ -148,13 +149,15 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
         mv = MedicalVolume(volume, self._AFFINE, headers=headers)
 
-        mv_unchanged = mv_no_headers.apply_modality_lut()
-        assert mv_unchanged.is_identical(mv_no_headers)
+        setup_logger(None)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_no_headers.apply_rescale()
 
-        mv_unchanged = mv_incorrect_headers.apply_window()
-        assert mv_unchanged.is_identical(mv_incorrect_headers)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_incorrect_headers.apply_rescale()
 
         assert np.allclose(mv.apply_rescale()._volume, volume * 2.5 + 1.0)
+        assert np.allclose(mv.apply_rescale(1, 3)._volume, volume * 3.0 + 1.0)
 
         # test sync
         mv2 = mv.apply_rescale(sync=True)
@@ -184,11 +187,12 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers=[pydicom.Dataset()])
         mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
 
-        mv_unchanged = mv_no_headers.apply_modality_lut()
-        assert mv_unchanged.is_identical(mv_no_headers)
+        setup_logger(None)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_no_headers.apply_modality_lut()
 
-        mv_unchanged = mv_incorrect_headers.apply_modality_lut()
-        assert mv_unchanged.is_identical(mv_incorrect_headers)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_incorrect_headers.apply_modality_lut()
 
         # test modality lut
         correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]
@@ -218,11 +222,12 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers={})
         mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
 
-        mv_unchanged = mv_no_headers.apply_modality_lut()
-        assert mv_unchanged.is_identical(mv_no_headers)
+        setup_logger(None)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_no_headers.apply_window()
 
-        mv_unchanged = mv_incorrect_headers.apply_window()
-        assert mv_unchanged.is_identical(mv_incorrect_headers)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_incorrect_headers.apply_window()
 
         # test VOILUTFunction linear
         correct_linear = np.array([0, 0, 0, 42.5, 127.5, 212.5, 255, 255, 255])
@@ -265,11 +270,12 @@ class TestMedicalVolume(unittest.TestCase):
         mv_incorrect_headers = MedicalVolume(volume, self._AFFINE, headers=[pydicom.Dataset()])
         mv = MedicalVolume(volume, self._AFFINE, headers=[ds])
 
-        mv_unchanged = mv_no_headers.apply_voi_lut()
-        assert mv_unchanged.is_identical(mv_no_headers)
+        setup_logger(None)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_no_headers.apply_voi_lut()
 
-        mv_unchanged = mv_incorrect_headers.apply_voi_lut()
-        assert mv_unchanged.is_identical(mv_incorrect_headers)
+        with self.assertLogs("voxel", level="INFO"):
+            mv_incorrect_headers.apply_voi_lut()
 
         # test modality lut1
         correct = [10, 10, 10, 11, 12, 13, 13, 13, 13]

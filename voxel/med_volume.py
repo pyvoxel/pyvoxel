@@ -4,6 +4,7 @@ This module defines :class:`MedicalVolume`, which is a wrapper for nD volumes.
 """
 from __future__ import annotations
 
+import logging
 import warnings
 from copy import deepcopy
 from mmap import mmap
@@ -38,6 +39,8 @@ __all__ = ["MedicalVolume"]
 
 # PyTorch version introducing complex tensor support.
 _TORCH_COMPLEX_SUPPORT_VERSION = version.Version("1.5.0")
+
+_vx_logger = logging.getLogger("voxel")
 
 
 class MedicalVolume(NDArrayOperatorsMixin):
@@ -796,32 +799,47 @@ class MedicalVolume(NDArrayOperatorsMixin):
             else:
                 h[key].value = value
 
-    def apply_rescale(self, inplace: bool = False, sync: bool = True) -> "MedicalVolume":
-        """Applies rescale to volume.
+    def apply_rescale(
+        self,
+        intercept: float = None,
+        slope: float = None,
+        inplace: bool = False,
+        dtype: np.dtype = "float32",
+        sync: bool = True,
+    ) -> "MedicalVolume":
+        """Rescales the volume by applying the intercept and slope.
 
         Args:
+            intercept (float, optional): Rescale intercept. If ``None``, will
+                use the value in the header.
+            slope (float, optional): Rescale slope. If ``None``, will
+                use the value in the header.
             inplace (bool, optional): If ``True``, applies rescale in place.
                 Otherwise, returns a copy of the volume with rescale applied.
+            dtype (np.dtype, optional): Data type to cast volume to before
+                rescale is applied.
             sync (bool, optional): If ``True``, updates the headers.
 
         Returns:
             MedicalVolume: Volume with rescale applied.
         """
-        headers = self.headers(flatten=True)
-        if headers is None:
-            warnings.warn("No headers found. Cannot apply rescale.")
+        if self._headers is None:
+            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = headers[0]
+        h = self._headers.flat[0]
         if "RescaleSlope" not in h or "RescaleIntercept" not in h:
-            warnings.warn("RescaleSlope or RescaleIntercept not found in headers.")
+            _vx_logger.info("Skipping: no Rescale Slope/Rescale Intercept found.")
             return self
 
         mv = self if inplace else self.clone()
-        mv = mv.astype("float64")
+        mv = mv.astype(dtype, copy=False)
 
-        mv._volume *= float(h.RescaleSlope)
-        mv._volume += float(h.RescaleIntercept)
+        rs = float(h["RescaleSlope"].value) if slope is None else slope
+        ri = float(h["RescaleIntercept"].value) if intercept is None else intercept
+
+        mv._volume *= rs
+        mv._volume += ri
 
         if sync:
             mv.set_metadata("RescaleSlope", 1.0)
@@ -840,55 +858,71 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             MedicalVolume: Volume with modality LUT applied.
         """
-
-        headers = self.headers(flatten=True)
-        if headers is None:
-            warnings.warn("No headers found. Cannot apply modality LUT.")
+        if self._headers is None:
+            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = headers[0]
+        h = self._headers.flat[0]
         if "ModalityLUTSequence" not in h:
-            warnings.warn("No ModalityLUTSequence found. Cannot apply modality LUT.")
+            _vx_logger.info("Skipping: no ModalityLUTSequence found.")
             return self
 
         mv = self._apply_lut(h["ModalityLUTSequence"][0], inplace=inplace)
         if sync:
-            mv._del_metadata("ModalityLUTSequence")
+            mv._delete_metadata("ModalityLUTSequence")
             mv.set_metadata("RescaleSlope", 1.0, force=True)
             mv.set_metadata("RescaleIntercept", 0.0, force=True)
 
         return mv
 
-    def apply_window(self, index: int = 0, inplace: bool = False) -> "MedicalVolume":
+    def apply_window(
+        self,
+        index: int = 0,
+        center: float = None,
+        width: float = None,
+        dtype: np.dtype = "float32",
+        inplace: bool = False,
+    ) -> "MedicalVolume":
         """Applies window to volume.
 
         Args:
             index (int, optional): Index of window to apply.
+            center (float, optional): Window center. If ``None``, will
+                use the value in the header.
+            width (float, optional): Window width. If ``None``, will
+                use the value in the header.
+            dtype (np.dtype, optional): Data type to cast volume to before
+                window is applied.
             inplace (bool, optional): If ``True``, applies window in place.
+                Otherwise, returns a new MedicalVolume.
 
         Returns:
             ``MedicalVolume`` with window applied.
         """
-        headers = self.headers(flatten=True)
-        if headers is None:
-            warnings.warn("No headers found. Cannot apply window.")
+        if self._headers is None:
+            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = headers[0]
+        h = self._headers.flat[0]
         if "WindowCenter" not in h or "WindowWidth" not in h:
-            warnings.warn("WindowCenter or WindowWidth not found. Cannot apply window.")
+            _vx_logger.info("Skipping: no Window Center or Window Width found.")
             return self
 
         if "RescaleIntercept" in h and "ModalityLUTSequence" in h:
-            raise ValueError("Only one of RescaleIntercept or ModalityLUTSequence can be present.")
+            raise ValueError("Only one of Rescale Intercept/Modality LUT Sequence may be present.")
 
         xp = self.device.xp
         mv = self if inplace else self.clone()
 
-        wc = h["WindowCenter"]
-        wc = wc.value[index] if wc.VM > 1 else wc.value
-        ww = h["WindowWidth"]
-        ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
+        wc = center
+        if center is None:
+            wc = h["WindowCenter"]
+            wc = wc.value[index] if wc.VM > 1 else wc.value
+
+        ww = width
+        if width is None:
+            ww = h["WindowWidth"]
+            ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
 
         bits = h.BitsStored
         if "ModalityLUTSequence" in h:
@@ -905,7 +939,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             y_max = y_max * float(h.RescaleSlope) + float(h.RescaleIntercept)
 
         y_range = y_max - y_min
-        mv = mv.astype("float64")
+        mv = mv.astype(dtype, copy=False)
 
         voi_func = str(h.get("VOILUTFunction", "LINEAR")).upper()
         if voi_func in ["LINEAR", "LINEAR_EXACT"]:
@@ -946,14 +980,13 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             ``MedicalVolume`` with VOI LUT applied.
         """
-        headers = self.headers(flatten=True)
-        if headers is None:
-            warnings.warn("No headers found. Cannot apply VOI LUT.")
+        if self._headers is None:
+            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = headers[0]
+        h = self._headers.flat[0]
         if "VOILUTSequence" not in h:
-            warnings.warn("No VOILUTSequence found. Cannot apply VOI LUT.")
+            _vx_logger.info("Skipping: no VOILUTSequence found.")
             return self
 
         return self._apply_lut(h["VOILUTSequence"][index], inplace=inplace)
@@ -1453,7 +1486,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         headers = np.reshape(headers, shape)
         return headers
 
-    def _del_metadata(self, key: Union[str, pydicom.BaseTag]):
+    def _delete_metadata(self, key: Union[str, pydicom.BaseTag]):
         """Deletes metadata for all headers.
 
         Args:
