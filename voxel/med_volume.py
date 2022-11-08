@@ -4,7 +4,6 @@ This module defines :class:`MedicalVolume`, which is a wrapper for nD volumes.
 """
 from __future__ import annotations
 
-import logging
 import warnings
 from copy import deepcopy
 from mmap import mmap
@@ -23,6 +22,7 @@ import voxel as vx
 import voxel.orientation as stdo
 from voxel.device import Device, cpu_device, get_array_module, get_device, to_device
 from voxel.utils import env
+from voxel.utils.pixel_data import apply_rescale, apply_window, invert
 
 if env.sitk_available():
     import SimpleITK as sitk
@@ -34,13 +34,12 @@ if env.package_available("h5py"):
 if TYPE_CHECKING:
     from voxel.io.format_io import ImageDataFormat
 
+
 __all__ = ["MedicalVolume"]
 
 
 # PyTorch version introducing complex tensor support.
 _TORCH_COMPLEX_SUPPORT_VERSION = version.Version("1.5.0")
-
-_vx_logger = logging.getLogger("voxel")
 
 
 class MedicalVolume(NDArrayOperatorsMixin):
@@ -801,10 +800,10 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
     def apply_rescale(
         self,
-        intercept: float = None,
         slope: float = None,
+        intercept: float = None,
+        dtype: np.dtype = None,
         inplace: bool = False,
-        dtype: np.dtype = "float32",
         sync: bool = True,
     ) -> "MedicalVolume":
         """Rescales the volume by applying the intercept and slope.
@@ -814,36 +813,28 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 use the value in the header.
             slope (float, optional): Rescale slope. If ``None``, will
                 use the value in the header.
-            inplace (bool, optional): If ``True``, applies rescale in place.
-                Otherwise, returns a copy of the volume with rescale applied.
             dtype (np.dtype, optional): Data type to cast volume to before
                 rescale is applied.
+            inplace (bool, optional): If ``True``, rescales the volume in place.
             sync (bool, optional): If ``True``, updates the headers.
 
         Returns:
             MedicalVolume: Volume with rescale applied.
         """
-        if self._headers is None:
-            _vx_logger.info("Skipping: no headers found.")
-            return self
-
-        h = self._headers.flat[0]
-        if "RescaleSlope" not in h or "RescaleIntercept" not in h:
-            _vx_logger.info("Skipping: no Rescale Slope/Rescale Intercept found.")
+        if self._headers is None and (intercept is None or slope is None):
             return self
 
         mv = self if inplace else self.clone()
-        mv = mv.astype(dtype, copy=False)
+        mv = mv.astype(np.dtype(dtype), copy=False)
 
-        rs = float(h["RescaleSlope"].value) if slope is None else slope
-        ri = float(h["RescaleIntercept"].value) if intercept is None else intercept
-
-        mv._volume *= rs
-        mv._volume += ri
+        h: pydicom.Dataset = self._headers.flat[0]
+        rs = float(h.get("RescaleSlope", 1)) if slope is None else slope
+        ri = float(h.get("RescaleIntercept", 0)) if intercept is None else intercept
+        apply_rescale(mv._volume, rs, ri, inplace=True)
 
         if sync:
-            mv.set_metadata("RescaleSlope", 1.0)
-            mv.set_metadata("RescaleIntercept", 0.0)
+            mv._delete_metadata("RescaleSlope")
+            mv._delete_metadata("RescaleIntercept")
 
         return mv
 
@@ -852,38 +843,29 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         Args:
             inplace (bool, optional): If ``True``, applies modality LUT in place.
-                Otherwise, returns a new MedicalVolume.
             sync (bool, optional): If ``True``, updates the headers.
 
         Returns:
             MedicalVolume: Volume with modality LUT applied.
         """
         if self._headers is None:
-            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = self._headers.flat[0]
-        if "ModalityLUTSequence" not in h:
-            _vx_logger.info("Skipping: no ModalityLUTSequence found.")
-            return self
-
-        mv = self._apply_lut(h["ModalityLUTSequence"][0], inplace=inplace)
-        if sync:
-            mv._delete_metadata("ModalityLUTSequence")
-            mv.set_metadata("RescaleSlope", 1.0, force=True)
-            mv.set_metadata("RescaleIntercept", 0.0, force=True)
-
-        return mv
+        return self._apply_lut("ModalityLUTSequence", index=0, inplace=inplace, sync=sync)
 
     def apply_window(
         self,
         index: int = 0,
         center: float = None,
         width: float = None,
-        dtype: np.dtype = "float32",
+        output_range: Tuple[float, float] = None,
+        voi_lut_function: str = None,
+        dtype: np.dtype = None,
         inplace: bool = False,
+        sync: bool = True,
     ) -> "MedicalVolume":
-        """Applies window to volume.
+        """Windows the volume using the window center and width.
+        User supplied values will override the values in the header.
 
         Args:
             index (int, optional): Index of window to apply.
@@ -891,109 +873,106 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 use the value in the header.
             width (float, optional): Window width. If ``None``, will
                 use the value in the header.
+            output_range (Tuple[float, float], optional): Output range to
+                apply window to. If ``None``, will use the value in the header.
+            voi_lut_function (str, optional): VOI LUT function. If ``None``, will
+                use the value in the header.
             dtype (np.dtype, optional): Data type to cast volume to before
                 window is applied.
             inplace (bool, optional): If ``True``, applies window in place.
-                Otherwise, returns a new MedicalVolume.
+            sync (bool, optional): If ``True``, updates the headers.
 
         Returns:
             ``MedicalVolume`` with window applied.
         """
-        if self._headers is None:
-            _vx_logger.info("Skipping: no headers found.")
+        if self._headers is None and (center is None or width is None):
             return self
 
-        h = self._headers.flat[0]
-        if "WindowCenter" not in h or "WindowWidth" not in h:
-            _vx_logger.info("Skipping: no Window Center or Window Width found.")
-            return self
+        # Define the window center, window width, and VOI LUT function
+        wc, ww, vlf = center, width, voi_lut_function
+        if self._headers is not None:
+            h: pydicom.Dataset = self._headers.flat[0]
+            if center is None:
+                if "WindowCenter" not in h:
+                    return self
 
-        if "RescaleIntercept" in h and "ModalityLUTSequence" in h:
-            raise ValueError("Only one of Rescale Intercept/Modality LUT Sequence may be present.")
+                wc = h["WindowCenter"]
+                wc = float(wc.value[index]) if wc.VM > 1 else float(wc.value)
 
-        xp = self.device.xp
+            if width is None:
+                if "WindowWidth" not in h:
+                    return self
+
+                ww = h["WindowWidth"]
+                ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
+
+            if voi_lut_function is None:
+                vlf = h.get("VOILUTFunction", None)
+
+        # Apply the window transformation
         mv = self if inplace else self.clone()
+        mv = self.astype(dtype, copy=False)
+        apply_window(mv._volume, wc, ww, output_range, vlf, inplace=True)
 
-        wc = center
-        if center is None:
-            wc = h["WindowCenter"]
-            wc = wc.value[index] if wc.VM > 1 else wc.value
-
-        ww = width
-        if width is None:
-            ww = h["WindowWidth"]
-            ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
-
-        bits = h.BitsStored
-        if "ModalityLUTSequence" in h:
-            lut = h.ModalityLUTSequence[0]
-            bits = lut.LUTDescriptor[2]
-
-        y_min, y_max = 0, 2**bits - 1
-        if h.PixelRepresentation == 1:
-            y_min -= 2 ** (bits - 1)
-            y_max -= 2 ** (bits - 1)
-
-        if "RescaleSlope" in h and "RescaleIntercept" in h:
-            y_min = y_min * float(h.RescaleSlope) + float(h.RescaleIntercept)
-            y_max = y_max * float(h.RescaleSlope) + float(h.RescaleIntercept)
-
-        y_range = y_max - y_min
-        mv = mv.astype(dtype, copy=False)
-
-        voi_func = str(h.get("VOILUTFunction", "LINEAR")).upper()
-        if voi_func in ["LINEAR", "LINEAR_EXACT"]:
-            if voi_func == "LINEAR":
-                if ww < 1:
-                    raise ValueError("Window Width must be greater than 1 for LINEAR.")
-                wc -= 0.5
-                ww -= 1
-            elif ww <= 0:
-                raise ValueError("Window Width must be greater than 0 for LINEAR_EXACT.")
-
-            lb = mv._volume <= (wc - ww / 2)
-            ub = mv._volume > (wc + ww / 2)
-            wb = xp.logical_and(~lb, ~ub)
-
-            mv._volume[lb] = y_min
-            mv._volume[ub] = y_max
-            if wb.any():
-                mv._volume[wb] = ((mv._volume[wb] - wc) / ww + 0.5) * y_range + y_min
-
-        elif voi_func == "SIGMOID":
-            if ww <= 0:
-                raise ValueError("Window Width must be greater than 0 for SIGMOID.")
-
-            mv._volume = y_range / (1 + np.exp(-4 * (mv._volume - wc) / ww)) + y_min
-        else:
-            raise ValueError(f"VOILUTFunction {voi_func} is not supported.")
+        if sync:
+            for key in ["WindowCenter", "WindowWidth", "VOILUTFunction"]:
+                mv._delete_metadata(key)
 
         return mv
 
-    def apply_voi_lut(self, index: int = 0, inplace: bool = False) -> "MedicalVolume":
+    def apply_voi_lut(
+        self, index: int = 0, inplace: bool = False, sync: bool = True
+    ) -> "MedicalVolume":
         """Applies VOI LUT to volume.
 
         Args:
             index (int, optional): Index of VOI LUT to apply.
             inplace (bool, optional): If ``True``, applies VOI LUT in place.
+            sync (bool, optional): If ``True``, updates the headers by removing
+                the VOI LUT Sequence and setting the window to the dynamic range.
 
         Returns:
             ``MedicalVolume`` with VOI LUT applied.
         """
         if self._headers is None:
-            _vx_logger.info("Skipping: no headers found.")
             return self
 
-        h = self._headers.flat[0]
-        if "VOILUTSequence" not in h:
-            _vx_logger.info("Skipping: no VOILUTSequence found.")
+        return self._apply_lut("VOILUTSequence", index=index, inplace=inplace, sync=sync)
+
+    def to_grayscale(
+        self,
+        mode: str = "MONOCHROME2",
+        pixel_range: Tuple[float, float] = None,
+        inplace: bool = False,
+        sync: bool = True,
+    ) -> "MedicalVolume":
+        """Converts volume to a grayscale mode."""
+        if self._headers is None:
             return self
 
-        return self._apply_lut(h["VOILUTSequence"][index], inplace=inplace)
+        options = ["MONOCHROME1", "MONOCHROME2"]
+        if mode not in options:
+            raise ValueError(f"Photometric Interpretation {mode} is not a grayscale mode.")
+
+        h: pydicom.Dataset = self._headers.flat[0]
+        if "PhotometricInterpretation" not in h or h.PhotometricInterpretation == mode:
+            return self
+
+        mv = self if inplace else self.clone()
+        invert(mv._volume, pixel_range, inplace=True)
+
+        if sync:
+            mv.set_metadata("PhotometricInterpretation", mode)
+
+        return mv
 
     def materialize(self):
         if not self.is_mmap:
             return self[:]
+        else:
+            xp = self.device.xp
+            self._volume = xp.asarray(self._volume)
+            return self
 
     def round(self, decimals=0, affine=False) -> "MedicalVolume":
         """Round array (and optionally affine matrix).
@@ -1492,12 +1471,18 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Args:
             key (str or pydicom.BaseTag): Metadata field to access.
         """
-        headers = self.headers(flatten=True)
-        if headers is not None:
-            for h in headers:
-                del h[key]
+        if self._headers is not None:
+            for h in self._headers.flat:
+                if key in h:
+                    del h[key]
 
-    def _apply_lut(self, lut: pydicom.Dataset, inplace: bool = False) -> "MedicalVolume":
+    def _apply_lut(
+        self,
+        key: Union[str, pydicom.BaseTag],
+        index: int = 0,
+        inplace: bool = False,
+        sync: bool = True,
+    ) -> "MedicalVolume":
         """Applies a LUT to the volume.
 
         Args:
@@ -1507,20 +1492,24 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             ``MedicalVolume`` with a LUT applied.
         """
-        h = self._headers.flatten()[0]
+        h: pydicom.Dataset = self._headers.flat[0]
         xp = self.device.xp
-        mv = self if inplace else self.clone()
 
+        if key not in h or index > len(h.get(key)) - 1:
+            return self
+
+        lut = h.get(key)[index]
+        mv = self if inplace else self.clone()
         entries = lut.LUTDescriptor[0] if lut.LUTDescriptor[0] > 0 else 2**16
         first_mapped = lut.LUTDescriptor[1]
 
-        bits = int(lut.LUTDescriptor[2])
-        bits = 16 if bits in range(9, 16) else bits
-        if bits not in [8, 16]:
-            raise ValueError(f"Unsupported LUT bit depth: {bits}.")
+        bits_stored = int(lut.LUTDescriptor[2])
+        bits_allocated = 16 if bits_stored in range(9, 16) else bits_stored
+        if bits_allocated not in [8, 16]:
+            raise ValueError(f"Unsupported LUT bit depth: {bits_allocated}.")
 
         sign = "u" if h.PixelRepresentation == 0 else "i"
-        lut_dtype = f"<{sign}{bits // 8}"
+        lut_dtype = f"<{sign}{bits_allocated // 8}"
 
         if lut["LUTData"].VR == "OW":
             lut_dtype = "<" if h.is_little_endian else ">" + lut_dtype[1:]
@@ -1528,12 +1517,18 @@ class MedicalVolume(NDArrayOperatorsMixin):
         else:
             lut_data = xp.array(lut["LUTData"].value, dtype=lut_dtype)
 
-        # Convert all pixel values into LUT indices.
-        lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits // 8}")
+        # Convert all pixel values into LUT indices
+        lut_idxs = xp.zeros_like(self._volume, dtype=f"{sign}{bits_allocated // 8}")
         mapped_pixels = self._volume >= first_mapped
         lut_idxs[mapped_pixels] = self._volume[mapped_pixels] - first_mapped
         xp.clip(lut_idxs, 0, entries - 1, out=lut_idxs)
         mv._volume = lut_data[lut_idxs]
+
+        if sync:
+            mv._delete_metadata(key)
+            mv.set_metadata("BitsStored", bits_stored, force=True)
+            mv.set_metadata("BitsAllocated", bits_allocated, force=True)
+            mv.set_metadata("HighBit", bits_stored - 1, force=True)
 
         return mv
 
