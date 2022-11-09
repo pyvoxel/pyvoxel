@@ -31,7 +31,7 @@ If applicable, add screenshots to help explain your problem.
 Please also provide the output of the following code:
 
 ```python
->>> from dosma.utils.collect_env import collect_env_info
+>>> from voxel.utils.collect_env import collect_env_info
 >>> print(collect_env_info())
 ```
 

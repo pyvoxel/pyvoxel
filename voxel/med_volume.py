@@ -123,7 +123,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
     >>> type(exp_arr_gpu)
     <class 'voxel.MedicalVolume'>
 
-    **ALPHA**: MedicalVolumes are also interoperable with popular image data structures
+    MedicalVolumes are also interoperable with popular image data structures
     with zero-copy, meaning array data will not be copied. Formats currently include the
     SimpleITK Image, Nibabel Nifti1Image, and PyTorch tensors:
 
@@ -134,7 +134,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
     >>> torch_tensor = mv.to_torch()  # Convert to torch tensor
     >>> mv_from_tensor = MedicalVolume.from_torch(torch_tensor, affine)
 
-    **ALPHA**: MedicalVolumes can also be used with memmapped arrays.
+    MedicalVolumes can also be used with memmapped arrays.
     This makes loading much faster and allows interaction with larger-than-memory
     arrays. Only when the volume is modified will the volume be loaded
     into memory and modified. If you take a slice of the memmaped array, the underlying

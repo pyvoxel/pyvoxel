@@ -1,6 +1,6 @@
 .. _core_api:
 
-Core API (dosma.core)
+Core
 ================================================================================
 
 MedicalVolume
@@ -11,7 +11,7 @@ MedicalVolume
    :toctree: generated
    :nosignatures:
 
-   dosma.MedicalVolume
+   voxel.MedicalVolume
 
 
 Numpy Routines
@@ -24,35 +24,35 @@ Numpy operations that are supported on MedicalVolumes.
    :toctree: generated
    :nosignatures:
 
-   dosma.core.numpy_routines.all_np
-   dosma.core.numpy_routines.amax
-   dosma.core.numpy_routines.amin
-   dosma.core.numpy_routines.any_np
-   dosma.core.numpy_routines.argmax
-   dosma.core.numpy_routines.argmin
-   dosma.core.numpy_routines.around
-   dosma.core.numpy_routines.clip
-   dosma.core.numpy_routines.concatenate
-   dosma.core.numpy_routines.expand_dims
-   dosma.core.numpy_routines.may_share_memory
-   dosma.core.numpy_routines.mean_np
-   dosma.core.numpy_routines.nan_to_num
-   dosma.core.numpy_routines.nanargmax
-   dosma.core.numpy_routines.nanargmin
-   dosma.core.numpy_routines.nanmax
-   dosma.core.numpy_routines.nanmean
-   dosma.core.numpy_routines.nanmin
-   dosma.core.numpy_routines.nanstd
-   dosma.core.numpy_routines.nansum
-   dosma.core.numpy_routines.ones_like
-   dosma.core.numpy_routines.pad
-   dosma.core.numpy_routines.shares_memory
-   dosma.core.numpy_routines.squeeze
-   dosma.core.numpy_routines.stack
-   dosma.core.numpy_routines.std
-   dosma.core.numpy_routines.sum_np
-   dosma.core.numpy_routines.where
-   dosma.core.numpy_routines.zeros_like
+   voxel.numpy_routines.all_np
+   voxel.numpy_routines.amax
+   voxel.numpy_routines.amin
+   voxel.numpy_routines.any_np
+   voxel.numpy_routines.argmax
+   voxel.numpy_routines.argmin
+   voxel.numpy_routines.around
+   voxel.numpy_routines.clip
+   voxel.numpy_routines.concatenate
+   voxel.numpy_routines.expand_dims
+   voxel.numpy_routines.may_share_memory
+   voxel.numpy_routines.mean_np
+   voxel.numpy_routines.nan_to_num
+   voxel.numpy_routines.nanargmax
+   voxel.numpy_routines.nanargmin
+   voxel.numpy_routines.nanmax
+   voxel.numpy_routines.nanmean
+   voxel.numpy_routines.nanmin
+   voxel.numpy_routines.nanstd
+   voxel.numpy_routines.nansum
+   voxel.numpy_routines.ones_like
+   voxel.numpy_routines.pad
+   voxel.numpy_routines.shares_memory
+   voxel.numpy_routines.squeeze
+   voxel.numpy_routines.stack
+   voxel.numpy_routines.std
+   voxel.numpy_routines.sum_np
+   voxel.numpy_routines.where
+   voxel.numpy_routines.zeros_like
 
 Standard universal functions that act element-wise on the array are also supported.
 A (incomplete) list is shown below:
@@ -89,74 +89,29 @@ Image I/O
    :toctree: generated
    :nosignatures:
 
-   dosma.read
-   dosma.write
-   dosma.NiftiReader
-   dosma.NiftiWriter
-   dosma.DicomReader
-   dosma.DicomWriter
+   voxel.read
+   voxel.write
+   voxel.NiftiReader
+   voxel.NiftiWriter
+   voxel.DicomReader
+   voxel.DicomWriter
+   voxel.HttpReader
 
 
 Image Orientation
 ---------------------------
 .. automodule::
-   dosma.core.orientation
+   voxel.orientation
 
 .. autosummary::
    :toctree: generated
    :nosignatures:
 
-   dosma.core.orientation.to_affine
-   dosma.core.orientation.get_transpose_inds
-   dosma.core.orientation.get_flip_inds
-   dosma.core.orientation.orientation_nib_to_standard
-   dosma.core.orientation.orientation_standard_to_nib
-
-
-Image Registration
----------------------------
-For details on using registration, see the :ref:`Registration Guide <guide_registration>`.
-
-.. automodule::
-   dosma.core.registration
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   dosma.register
-   dosma.apply_warp
-   dosma.symlink_elastix
-   dosma.unlink_elastix
-
-
-Fitting
----------------------------
-For details on using fitting functions, see the :ref:`Fitting Guide <guide_fitting>`.
-
-.. automodule::
-   dosma.core.fitting
-
-General fitting functions:
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   dosma.curve_fit
-   dosma.polyfit
-   dosma.core.fitting.monoexponential
-   dosma.core.fitting.biexponential
-
-Fitter classes:
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   dosma.CurveFitter
-   dosma.PolyFitter
-   dosma.MonoExponentialFit
+   voxel.orientation.to_affine
+   voxel.orientation.get_transpose_inds
+   voxel.orientation.get_flip_inds
+   voxel.orientation.orientation_nib_to_standard
+   voxel.orientation.orientation_standard_to_nib
 
 
 Device
@@ -165,31 +120,6 @@ Device
    :toctree: generated
    :nosignatures:
 
-   dosma.Device
-   dosma.get_device
-   dosma.to_device
-
-
-Preferences
--------------
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   dosma.defaults._Preferences
-   dosma.preferences
-
-
-(BETA) Quantitative Values
----------------------------
-Utilities for different quantitative parameters.
-Note, this feature is in beta and will likely change in future releases.
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   dosma.core.quant_vals.QuantitativeValue
-   dosma.core.quant_vals.T1Rho
-   dosma.core.quant_vals.T2
-   dosma.core.quant_vals.T2Star
+   voxel.Device
+   voxel.get_device
+   voxel.to_device

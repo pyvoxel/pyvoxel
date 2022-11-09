@@ -10,8 +10,6 @@
    :hidden:
 
    introduction
-   installation
    user_guide
-   documentation
-   usage
+   api
    faq

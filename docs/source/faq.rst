@@ -3,26 +3,9 @@
 FAQs
 ================================================================================
 
-:ref:`How do I change my preferences? <faq-preferences>`
-
-:ref:`How do I cite DOSMA? <faq-citation>`
-
-|
-
-.. _faq-preferences:
-
-**How do I change my preferences?**
-
-Different users have different preferences for visualizations, data formats, etc.
-You can set your own preferences by launching the GUI (``dosma --app``) and pressing the ``Preferences`` button on the home
-page and change your settings.
-
-To save settings for all future computation sessions, click ``Save Settings``.
-To apply settings just to this session, click ``Apply Settings``.
-
 .. _faq-citation:
 
-**How do I cite DOSMA?**
+**How do I cite Voxel?**
 
     ::
 

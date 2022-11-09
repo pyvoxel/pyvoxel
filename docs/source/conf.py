@@ -30,7 +30,7 @@ def get_version():
 
 project = "voxel"
 copyright = "2019-2021, Arjun Desai"
-author = "Arjun Desai"
+author = "Arjun Desai, Rogier van der Sluijs"
 
 # The full version, including alpha/beta/rc tags
 # release = setup.get_version(ignore_nightly=True)
