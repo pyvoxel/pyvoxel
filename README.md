@@ -28,8 +28,8 @@ respectively. These can be loaded into multiple volumes with ease:
 ```python
 import voxel as vx
 
-xray = vx.load("path/to/xray")
-ct_scan = vx.load("path/to/ct/scan", num_workers=8, verbose=True)
+xray = vx.load("path/to/xray.dcm")
+ct_scan = vx.load("path/to/ct/folder/")
 
 multi_echo_scan = vx.load("/path/to/multi-echo/scan", group_by="EchoNumbers")
 dce_scan = vx.load("/path/to/dce/scan", group_by="TriggerTime")
