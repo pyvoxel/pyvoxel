@@ -3,11 +3,13 @@ import os
 from pathlib import Path
 from typing import List, Union
 
-from voxel.io import dicom, nifti  # noqa: F401
+from voxel.io import dicom, http, nifti  # noqa: F401
 from voxel.io.dicom import *  # noqa
 from voxel.io.dicom import DicomReader, DicomWriter
 from voxel.io.format_io import ImageDataFormat  # noqa
 from voxel.io.format_io import DataReader, DataWriter
+from voxel.io.http import *  # noqa
+from voxel.io.http import HttpReader
 from voxel.io.nifti import *  # noqa
 from voxel.io.nifti import NiftiReader, NiftiWriter
 from voxel.med_volume import MedicalVolume
@@ -24,6 +26,7 @@ __all__ = [
     "generic_load",
 ]
 __all__.extend(dicom.__all__)
+__all__.extend(http.__all__)
 __all__.extend(["ImageDataFormat"])
 __all__.extend(nifti.__all__)
 
@@ -168,10 +171,7 @@ def generic_load(file_or_dir_path: Union[str, Path, os.PathLike], expected_num_v
 
 
 def read(
-    path: Union[str, Path, os.PathLike],
-    data_format: ImageDataFormat = None,
-    unpack: bool = False,
-    **kwargs
+    path: Union[str, Path, os.PathLike], data_format: ImageDataFormat = None, **kwargs
 ) -> Union[MedicalVolume, List[MedicalVolume]]:
     """Read MedicalVolume(s) from file.
 
@@ -181,26 +181,27 @@ def read(
             (e.g. ``'dicom'``, ``'nifti'``, etc.). Use this is disambiguate between different
             data formats. If this function is not working, try using this argument.
             If not provided, voxel will try to infer data format from file extension.
-        unpack (bool, optional): If ``True`` and only 1 volume is loaded, return a single
-            volume instead of a list of volumes. This only applied to dicom loading.
         **kwargs: Additional keyword arguments passed to the data format reader.
 
     Returns:
         MedicalVolume | List[MedicalVolume]: Volume(s) loaded.
 
     Examples:
-        >>> vx.read("/path/to/multi-echo/dicom/folder", group_by="EchoNumbers")
-        >>> vx.read("/path/to/ct/dicom/folder")
-        >>> vx.read("/path/to/ct/nifti/file.nii.gz", mmap=True)
+        >>> vx.load("/path/to/multi-echo/dicom/folder", group_by="EchoNumbers")
+        >>> vx.load("/path/to/ct/dicom/folder")
+        >>> vx.load("/path/to/ct/nifti/file.nii.gz", mmap=True)
     """
+    if path.startswith("http://") or path.startswith("https://"):
+        with HttpReader() as hr:
+            out = hr.load(path, data_format=data_format, **kwargs)
+            return out
+
     if data_format is None:
         data_format = ImageDataFormat.get_image_data_format(path)
     elif isinstance(data_format, str):
         data_format = ImageDataFormat[data_format]
 
     out = get_reader(data_format).load(path, **kwargs)
-    if unpack and isinstance(out, (tuple, list)) and len(out) == 1:
-        out = out[0]
     return out
 
 

@@ -3,8 +3,10 @@
 This module contains NIfTI input/output helpers.
 """
 
+import gzip
 import os
-from typing import Collection
+from io import BytesIO
+from typing import Collection, Union
 
 import nibabel as nib
 
@@ -24,14 +26,22 @@ class NiftiReader(DataReader):
 
     data_format_code = ImageDataFormat.nifti
 
-    def load(self, file_path, mmap: bool = False) -> MedicalVolume:
+    def load(
+        self,
+        path_or_bytes: Union[str, bytes, os.PathLike, BytesIO],
+        mmap: bool = False,
+        compressed: bool = False,
+    ) -> MedicalVolume:
         """Load volume from NIfTI file path.
 
         A NIfTI file should only correspond to one volume.
 
         Args:
-            file_path (str): File path to NIfTI file.
+            path_or_bytes (Union[str, bytes, os.PathLike, BytesIO]): Path to NIfTI file or
+                bytes of NIfTI file.
             mmap (bool): Whether to use memory mapping.
+            compressed (bool): Whether to apply gzip decompression. This is only used if
+                `path_or_bytes` is a bytes or BytesIO object.
 
         Returns:
             MedicalVolume: Loaded volume.
@@ -40,15 +50,31 @@ class NiftiReader(DataReader):
             FileNotFoundError: If `file_path` not found.
             ValueError: If `file_path` does not end in a supported NIfTI extension.
         """
-        if not os.path.isfile(file_path):
-            raise FileNotFoundError("{} not found".format(file_path))
+        if isinstance(path_or_bytes, bytes):
+            path_or_bytes = BytesIO(path_or_bytes)
 
-        if not self.data_format_code.is_filetype(file_path):
-            raise ValueError(
-                "{} must be a file with extension '.nii' or '.nii.gz'".format(file_path)
-            )
+        if isinstance(path_or_bytes, BytesIO):
+            if compressed:
+                path_or_bytes = BytesIO(gzip.decompress(path_or_bytes.getvalue()))
 
-        nib_img = nib.load(file_path)
+            nifti_version = _nifti_version(path_or_bytes)
+            fh = nib.FileHolder(fileobj=path_or_bytes)
+            if nifti_version == 1:
+                nib_img = nib.Nifti1Image.from_file_map({"header": fh, "image": fh})
+            else:
+                nib_img = nib.Nifti2Image.from_file_map({"header": fh, "image": fh})
+
+        else:
+            if not os.path.isfile(path_or_bytes):
+                raise FileNotFoundError("{} not found".format(path_or_bytes))
+
+            if not self.data_format_code.is_filetype(path_or_bytes):
+                raise ValueError(
+                    "{} must be a file with extension '.nii' or '.nii.gz'".format(path_or_bytes)
+                )
+
+            nib_img = nib.load(path_or_bytes)
+
         return MedicalVolume.from_nib(
             nib_img,
             affine_precision=vx.config.affine_precision,
@@ -96,3 +122,26 @@ class NiftiWriter(DataWriter):
         return self.__dict__.keys()
 
     write = save  # pragma: no cover
+
+
+def _nifti_version(buffer: BytesIO) -> int:
+    """Get NIfTI version from buffer."""
+    nii1_sizeof_hdr = 348
+    nii2_sizeof_hdr = 540
+
+    byte_data = buffer.read(4)
+    sizeof_hdr = int.from_bytes(byte_data, byteorder="little")
+    if sizeof_hdr == nii1_sizeof_hdr:
+        return 1
+    elif sizeof_hdr == nii2_sizeof_hdr:
+        return 2
+    else:
+        sizeof_hdr = int.from_bytes(byte_data, byteorder="big")
+        if sizeof_hdr == nii1_sizeof_hdr:
+            return 1
+        elif sizeof_hdr == nii2_sizeof_hdr:
+            return 2
+
+    raise ValueError(
+        "This buffer is not a valid NIfTI file. Pass `compressed=True` if the buffer is gzipped."
+    )

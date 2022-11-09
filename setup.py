@@ -85,6 +85,7 @@ REQUIRED = [
     "packaging",
     "pydicom>=1.6.0",
     "PyYAML>=5.4.1",
+    "requests",
     "tabulate",
     "termcolor",
     "tqdm>=4.42.0",
@@ -110,6 +111,7 @@ EXTRAS = {
         # testing.
         "pytest-cov>=2.10.1",
         "pre-commit>=2.9.3",
+        "requests-mock",
         # upload.
         "twine",
     ],
