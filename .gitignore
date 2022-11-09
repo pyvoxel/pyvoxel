@@ -31,3 +31,6 @@ coverage.xml
 unittest-data/
 notebooks/
 data/
+
+# MacOS
+.DS_Store

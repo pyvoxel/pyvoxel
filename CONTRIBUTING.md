@@ -8,9 +8,9 @@ If you use Voxel in your work (research, company, etc.) and find it useful, spre
 There are many ways to contribute to Voxel:
 
 * Issues: Submitting bugs or suggesting new features
-* Documentation: Adding to the documentation or to the examples 
+* Documentation: Adding to the documentation or to the examples
 * Features: Implementing new features or bug fixes
-* Community: Answering questions and helping others get started 
+* Community: Answering questions and helping others get started
 
 ## Submitting a new issue or feature request
 Please do your best to follow these guidelines when opening an issue. It will make it signficantly easier to give useful feedback and resolve the issue faster.
@@ -36,7 +36,7 @@ If your issue is well written we're already 80% of the way there by the time you
 ## Contributing
 Before writing code, we strongly advise you to search through the existing PRs or issues to make sure that nobody is already working on the same thing. If you are unsure, it is always a good idea to open an issue to get some feedback.
 
-You will need basic git proficiency to be able to contribute to dosma. git is not the easiest tool to use but it has the greatest manual. Type git --help in a shell and enjoy. If you prefer books, [Pro Git](https://git-scm.com/book/en/v2) is a very good reference.
+You will need basic git proficiency to be able to contribute to voxel. git is not the easiest tool to use but it has the greatest manual. Type git --help in a shell and enjoy. If you prefer books, [Pro Git](https://git-scm.com/book/en/v2) is a very good reference.
 
 Follow these steps to start contributing:
 
@@ -136,7 +136,7 @@ make autoformat test build-docs
 
 ### Tests
 
-Library tests can be found in the 
+Library tests can be found in the
 [tests folder](https://github.com/pyvoxel/pyvoxel/tree/master/tests).
 
 From the root of the repository, here's how to run tests with `pytest` for the library:
