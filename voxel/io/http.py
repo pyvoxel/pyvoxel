@@ -114,8 +114,8 @@ class HttpReader(DataReader):
         """
 
         # do not pass verbose to reader, as files are already opened
-        dr = DicomReader(**kwargs)
-        return dr.read([BytesIO(buffer) for buffer in buffers])
+        dr = DicomReader()
+        return dr.read([BytesIO(buffer) for buffer in buffers], **kwargs)
 
     def _read_nifti(self, buffer: bytes, **kwargs):
         """Read NIfTI from data.
@@ -124,8 +124,8 @@ class HttpReader(DataReader):
             buffer (bytes): Bytes
             **kwargs: Keyword arguments for :class:`NiftiReader`.
         """
-        nr = NiftiReader(**kwargs)
-        return nr.read(BytesIO(buffer))
+        nr = NiftiReader()
+        return nr.read(BytesIO(buffer), **kwargs)
 
     def load(
         self,
@@ -181,6 +181,8 @@ class HttpReader(DataReader):
                 data_format = ImageDataFormat[data_format]
 
             if data_format == ImageDataFormat.nifti:
+                if urlparse(url).path.endswith(".gz"):
+                    kwargs = {"compressed": True, **kwargs}
                 return self._read_nifti(blob, **kwargs)
             elif data_format == ImageDataFormat.dicom:
                 return self._read_dicom([blob], **kwargs)

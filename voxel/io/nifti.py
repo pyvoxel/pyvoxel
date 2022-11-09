@@ -142,4 +142,6 @@ def _nifti_version(buffer: BytesIO) -> int:
         elif sizeof_hdr == nii2_sizeof_hdr:
             return 2
 
-    raise IOError("This buffer is not a valid NIfTI file.")
+    raise ValueError(
+        "This buffer is not a valid NIfTI file. Pass `compressed=True` if the buffer is gzipped."
+    )
