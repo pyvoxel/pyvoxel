@@ -78,11 +78,6 @@ def test_read():
     assert vol.is_identical(expected)
 
     dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
-    vol = vx.read(dcm_data, unpack=True)
-    expected = DicomReader().load(dcm_data)
-    assert vol.is_identical(expected)
-
-    dcm_data = os.path.join(pydd.get_testdata_file("MR_small.dcm"))
     vol = vx.read(dcm_data, group_by="EchoNumbers")[0]
     expected = DicomReader(group_by="EchoNumbers").load(dcm_data)[0]
     assert vol.is_identical(expected)
