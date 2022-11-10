@@ -5,11 +5,6 @@
 Basic Usage
 -----------
 
-voxel is designed for simple imaging I/O, registration, quantitative fitting, and AI-based image processing.
-
-voxel does not bundle Tensorflow and Keras installation by default.
-To enable  support, you must install these libraries as an additional step.
-
 We use the following abbreviations for libraries:
 
 >>> import numpy as np
@@ -19,7 +14,7 @@ We use the following abbreviations for libraries:
 Image I/O
 =========================
 
-voxel provides data readers and writers to allow you to read/write image data stored in NIfTI and DICOM standards.
+Voxel provides data readers and writers to allow you to read/write image data stored in NIfTI and DICOM standards.
 These I/O tools create or write from the voxel image class :class:`MedicalVolume`.
 
 For example to load a DICOM image series, which has multiple echos, with each echo corresponding to a volume,
@@ -64,7 +59,7 @@ Reformatting Images
 =========================
 
 Given the multiple different orientation conventions used by different image formats and libraries,
-reformatting medical images can be difficult to keep track of. voxel simplifies this by introducing
+reformatting medical images can be difficult to keep track of. Voxel simplifies this by introducing
 an unambiguous convention for image orientation based on the RAS+ coordinate system, in which all
 directions point to the increasing direction.
 
@@ -128,7 +123,7 @@ be summed over any two of the first three axes:
 Choosing A Computing Device
 ========================================
 
-voxel provides a device class :class:`voxel.Device`, which allows you to specify which device
+Voxel provides a device class :class:`voxel.Device`, which allows you to specify which device
 to use for :class:`MedicalVolume` operations. It extends the Device class from `CuPy <https://cupy.dev/>`_.
 To enable GPU computing support, install the correct build for CuPy on your machine.
 
@@ -139,10 +134,6 @@ To move a MedicalVolume to GPU 0, you can use the :meth:`MedicalVolume.to` metho
 You can also move the image back to the cpu:
 
 >>> mv_cpu = mv_gpu.cpu()  # or mv_gpu.to(vx.Device(-1))
-
-If the device is already on the specified device, the same object is returned.
-Note, some functionality such as curve fitting (:class:`voxel.curve_fit`), image registration,
-and image I/O are not supported with images on the GPU.
 
 
 Multi-Library Interoperability
