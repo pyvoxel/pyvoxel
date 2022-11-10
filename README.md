@@ -2,9 +2,9 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/pyvoxel/pyvoxel/CI)
 [![codecov](https://codecov.io/gh/pyvoxel/pyvoxel/branch/master/graph/badge.svg?token=X2FRQJHV2M)](https://codecov.io/gh/pyvoxel/pyvoxel)
-<!-- [![Documentation Status](https://readthedocs.org/projects/dosma/badge/?version=latest)](https://dosma.readthedocs.io/en/latest/?badge=latest) -->
+[![Documentation Status](https://readthedocs.org/projects/pyvoxel/badge/?version=latest)](https://pyvoxel.readthedocs.io/en/latest/?badge=latest)
 
-<!-- [Documentation](http://dosma.readthedocs.io/) -->
+[Documentation](http://dosma.readthedocs.io/) | [Installation](https://pyvoxel.readthedocs.io/en/latest/introduction.html) | [Basic Usage](https://pyvoxel.readthedocs.io/en/latest/user_guide.html)
 
 Voxel provides fast Pythonic data structures and tools for wrangling with medical images.
 
@@ -55,6 +55,35 @@ mv_gpu = mv_a.to(vx.Device(0))
 
 # Take slices. Metadata will be sliced appropriately.
 mv_subvolume = mv_a[10:20, 10:20, 4:6]
+```
+
+### Easily Prepare Data for AI Pipelines
+Voxel enables you to preprocess DICOM images for deep learning in a few lines of code:
+
+```python
+mv = (
+  vx.load("/dicoms")
+  .apply_rescale()
+  .apply_window()
+  .to_grayscale()
+)
+
+# Zero-copy to PyTorch
+arr = mv.to_torch()
+```
+
+### Connect with PACS
+Voxel provides easy access to data stored in a PACS environment through DICOMweb.
+This makes loading data from a remote server just as easy as using the local filesystem.
+
+```python
+# Download an MRI from a local Orthanc instance
+mv = vx.load("http://localhost:8042/dicom-web/studies/x/series/y", params={"Modality": "MR"})
+
+# Re-use the session for multiple requests
+with vx.HttpReader(verbose=True) as hr:
+  mv_a = hr.load("http://localhost:8042/dicom-web/studies/v/series/w")
+  mv_b = hr.load("http://localhost:8042/dicom-web/studies/x/series/y")
 ```
 
 ## Contribute
