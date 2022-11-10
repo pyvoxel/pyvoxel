@@ -61,6 +61,7 @@ mv_subvolume = mv_a[10:20, 10:20, 4:6]
 Voxel enables you to preprocess DICOM images for deep learning in a few lines of code:
 
 ```python
+# Load a scan, and prepare it for AI/visualization
 mv = (
   vx.load("/dicoms")
   .apply_rescale()
