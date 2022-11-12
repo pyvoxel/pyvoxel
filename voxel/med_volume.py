@@ -1068,6 +1068,29 @@ class MedicalVolume(NDArrayOperatorsMixin):
             raise ValueError("`out` must be None")
         return std(self, axis=axis, dtype=dtype, keepdims=keepdims, where=where)
 
+    def contiguous(self) -> "MedicalVolume":
+        """Returns a MedicalVolume with pixel data contiguous in memory.
+
+        If the pixel data is already contiguous, returns the ``self``
+        medical volume.
+
+        Returns:
+            MedicalVolume: MedicalVolume with contiguous pixel data.
+        """
+        from voxel.numpy_routines import ascontiguousarray
+
+        if self.A.data.contiguous:
+            return self
+        return ascontiguousarray(self)
+
+    def is_contiguous(self) -> bool:
+        """Returns whether the pixel data is contiguous in memory.
+
+        Returns:
+            bool: Whether the pixel data is contiguous in memory.
+        """
+        return self.A.data.contiguous
+
     @property
     def A(self):
         """The pixel array. Same as ``self.volume``.
