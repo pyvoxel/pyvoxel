@@ -51,6 +51,8 @@ class Device(object):
             id = id_or_device
         elif id_or_device == "cpu":
             _type, id = id_or_device, -1
+        elif id_or_device == "cuda":
+            _type, id = id_or_device, 0
         elif isinstance(id_or_device, Device):
             _type, id = id_or_device.type, id_or_device.id
         elif env.cupy_available() and isinstance(id_or_device, cp.cuda.Device):
