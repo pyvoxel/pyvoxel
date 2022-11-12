@@ -1048,6 +1048,26 @@ class MedicalVolume(NDArrayOperatorsMixin):
             raise ValueError("`out` must be None")
         return mean_np(self, axis=axis, dtype=dtype, keepdims=keepdims, where=where)
 
+    def std(self, axis=None, dtype=None, out=None, keepdims=False, where=np._NoValue):
+        """Compute the standard deviation along the specified axis. Identical to :meth:`std`.
+
+        See :meth:`std` for more information.
+
+        Args:
+            axis: Same as :meth:`std`.
+            dtype: Same as :meth:`std`.
+            out: Same as :meth:`std`.
+            keepdims: Same as :meth:`std`.
+            initial: Same as :meth:`std`.
+            where: Same as :meth:`std`.
+        """
+        from voxel.numpy_routines import std
+
+        # `out` is required for cupy arrays because of how cupy calls array.
+        if out is not None:
+            raise ValueError("`out` must be None")
+        return std(self, axis=axis, dtype=dtype, keepdims=keepdims, where=where)
+
     @property
     def A(self):
         """The pixel array. Same as ``self.volume``.
