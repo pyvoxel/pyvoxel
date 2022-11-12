@@ -391,3 +391,18 @@ class TestNumpyRoutinesMedicalVolume(unittest.TestCase):
         mv2 = np.pad(mv, pad_width)
         assert np.all(mv2.A == expected_arr)
         assert np.all(np.asarray(mv2.scanner_origin) == expected_origin)
+
+    def test_contiguous(self):
+        arr = np.ones((2, 3, 4))
+
+        mv = MedicalVolume(arr, np.eye(4))
+        assert mv.is_contiguous()
+
+        ornt = mv.orientation
+        ornt = ornt[1:] + ornt[:1]
+        mv = mv.reformat(ornt)
+        assert not mv.is_contiguous()
+
+        mv_contiguous = mv.contiguous()
+        assert mv_contiguous.is_contiguous()
+        assert mv_contiguous.A.data.contiguous

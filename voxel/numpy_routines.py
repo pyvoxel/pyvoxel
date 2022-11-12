@@ -619,6 +619,15 @@ def may_share_memory(a, b, max_work=None):  # pragma: no cover
     return vol and headers
 
 
+@implements(np.ascontiguousarray)
+def ascontiguousarray(a, dtype=None, *, like=None):
+    if isinstance(like, MedicalVolume):
+        like = like.A
+    if like is not None:
+        raise ValueError("Does not support `like` argument.")
+    return a._partial_clone(volume=np.ascontiguousarray(a.A, dtype=dtype))
+
+
 def _to_positive_axis(
     axis: Union[int, Sequence[int]],
     ndim: int,
