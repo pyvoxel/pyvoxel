@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import List, Union
 
+from voxel.device import Device
 from voxel.io import dicom, http, nifti  # noqa: F401
 from voxel.io.dicom import *  # noqa
 from voxel.io.dicom import DicomReader, DicomWriter
@@ -171,7 +172,10 @@ def generic_load(file_or_dir_path: Union[str, Path, os.PathLike], expected_num_v
 
 
 def read(
-    path: Union[str, Path, os.PathLike], data_format: ImageDataFormat = None, **kwargs
+    path: Union[str, Path, os.PathLike],
+    data_format: ImageDataFormat = None,
+    device: Union[Device, str, int] = "cpu",
+    **kwargs
 ) -> Union[MedicalVolume, List[MedicalVolume]]:
     """Read MedicalVolume(s) from file.
 
@@ -202,6 +206,10 @@ def read(
         data_format = ImageDataFormat[data_format]
 
     out = get_reader(data_format).load(path, **kwargs)
+    if isinstance(out, (list, tuple)):
+        out = type(out)(v.to(device) for v in out)
+    else:
+        out = out.to(device)
     return out
 
 
