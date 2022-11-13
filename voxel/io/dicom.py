@@ -20,7 +20,7 @@ import multiprocessing as mp
 import os
 import re
 from math import ceil, log10
-from typing import Collection, Sequence, Tuple, Union
+from typing import Any, Collection, Dict, List, Sequence, Tuple, Union
 
 import nibabel as nib
 import numpy as np
@@ -630,3 +630,185 @@ def _wrap_as_tuple(x, default=None):
     elif isinstance(x, Sequence) and not isinstance(x, tuple):
         x = tuple(x)
     return x
+
+
+def add_dicom_headers(
+    mv: MedicalVolume,
+    *,
+    modality: str,
+    **metadata,
+) -> MedicalVolume:
+    """Add metadata and required DICOM tags to the MedicalVolume.
+
+    TODO:
+        - Add support for non-int16 dtypes
+        - Add support for multi-dimensional headers.
+
+    Args:
+        mv: The medical volume to add DICOM headers to.
+        modality: The modality of the DICOM file (e.g. "MR").
+        high_bit: The high bit of the recon.
+        series_uid: The series unique id.
+        study_uid: The study unique id.
+        series_number: The series number.
+        metadata: Additional metadata to add to the DICOM headers.
+
+    Returns:
+        MedicalVolume: The medical volume with DICOM headers added.
+    """
+    # Convert inputs xval_yval to XvalYval following pydicom syntax.
+    def _split_and_capitalize(x):
+        return "".join([s.capitalize() for s in x.split("_")])
+
+    metadata = {_split_and_capitalize(k) if "_" in k else k: v for k, v in metadata.items()}
+
+    min_val = np.min(mv.A)
+    max_val = np.max(mv.A)
+    window_center = (min_val + max_val) / 2
+    window_width = max_val - min_val
+
+    dtype = mv.dtype
+    dtype = getattr(np, dtype.name)
+    nbits = dtype(0).nbytes * 8
+    high_bit = metadata.get("HighBit", None)
+    if high_bit is not None and high_bit > nbits:
+        raise ValueError(f"high_bit cannot be greater than {nbits}")
+    if high_bit is None:
+        # TODO: Change this to be based on the dynamic range of the data.
+        # This should also handle data with negative values.
+        metadata["HighBit"] = nbits
+
+    metadata = dict(metadata)
+    default_metadata = {
+        # Series Information.
+        "SeriesInstanceUID": str(pydicom.uid.generate_uid()),
+        "StudyInstanceUID": str(pydicom.uid.generate_uid()),
+        "SeriesNumber": 1,
+        "ImageType": ["DERIVED", "PRIMARY", "OTHER"],
+        "StudyDate": "00010101",
+        "SeriesDate": "00010101",
+        "AcquisitionDate": "00010101",
+        "ContentDate": "00010101",
+        "StudyTime": "000000",
+        "SeriesTime": "000000",
+        "AcquisitionTime": "000000",
+        "ContentTime": "000000",
+        "AccessionNumber": "",
+        "Modality": modality,
+        "InstitutionName": "Anonymized",
+        "ReferringPhysicianName": "",
+        "StationName": "Anonymized",
+        # Patient Information.
+        "PatientName": "Anonymized",
+        "PatientID": "Anonymized",
+        "PatientBirthDate": "00010101",
+        "PatientSex": "",
+        # Image Information.
+        "Rows": mv.shape[0],
+        "Columns": mv.shape[1],
+        "PixelRepresentation": 1,
+        "SamplesPerPixel": 1,
+        "PhotometricInterpretation": "MONOCHROME2",
+        "BitsAllocated": nbits,
+        "BitsStored": nbits,
+        "SmallestImagePixelValue": int(min_val.round()),
+        "LargestImagePixelValue": int(max_val.round()),
+        "WindowCenter": float(window_center.round()),
+        "WindowWidth": float(window_width.round()),
+    }
+    default_metadata.update(metadata)
+
+    # Update headers for each slice.
+    shared_uid = pydicom.uid.generate_uid()
+
+    def _generate_file_meta(sl: int):
+        """Generates a little endian formatted file meta info."""
+        file_meta = pydicom.dataset.FileMetaDataset()
+        file_meta.MediaStorageSOPClassUID = pydicom.uid.UID("1.2.840.10008.5.1.4.1.1.4")
+        file_meta.MediaStorageSOPInstanceUID = pydicom.uid.UID(f"{shared_uid}.{sl+1}")
+        file_meta.ImplementationClassUID = pydicom.uid.UID("1.2.840.113619.6.374")
+        file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+        # file_meta.SOPInstanceUID = pydicom.uid.generate_uid()
+        # file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+        return file_meta
+
+    VR_registry = {float: "DS", int: "IS", str: "CS"}
+    sl_header_metadata = _get_per_slice_metadata(mv.affine, mv.shape[2])
+    headers = [
+        pydicom.FileDataset("./file", {}, file_meta=_generate_file_meta(sl), preamble=b"\0" * 128)
+        for sl in range(mv.shape[2])
+    ]
+    for i, header in enumerate(headers):
+        metadata = {**default_metadata, **sl_header_metadata[i]}
+        for k, v in metadata.items():
+            try:
+                dtype = type(v[0]) if isinstance(v, (list, tuple)) else type(v)
+                header.add_new(k, VR_registry[dtype], v)
+            except Exception as e:
+                print(f"Failed to set {k} to {v}: {e}")
+                raise e
+
+        header.is_little_endian = True
+        header.is_implicit_VR = False
+
+    mv = mv._partial_clone(volume=mv.A, headers=headers)
+
+    return mv
+
+
+def _get_per_slice_metadata(affine, num_slices: int) -> List[Dict[str, Any]]:
+    """Convert affine matrix into dicom metadata for each slice.
+
+    Args:
+        affine (ndarray): The 4x4 RAS+ affine matrix.
+            This is the default affine matrix in DOSMA
+            (i.e. MedicalVolume.affine).
+        num_slices (int): The number of slices in the volume.
+            This should be equal to the number of slices in the last dimension
+            of the volume.
+
+    Returns:
+        List[Dict[str, Any]]: The metadata for each slice.
+    """
+    dim = 2
+
+    # DICOM is in the LPS orientation.
+    # Convert RAS+ affine matrix -> LPS affine matrix.
+    lps_affine = affine.copy()
+    lps_affine[:2, :] = -1 * lps_affine[:2, :]
+
+    image_orientation_patient = np.concatenate([lps_affine[:3, 1], lps_affine[:3, 0]])
+    slice_thickness = float(np.linalg.norm(lps_affine[:3, dim]).round(4))
+    metadata = {
+        "SliceThickness": slice_thickness,
+        "SpacingBetweenSlices": slice_thickness,  # spacing is the same as the slice thickness
+        "PixelSpacing": (
+            np.linalg.norm(lps_affine[:3, 1]),
+            np.linalg.norm(lps_affine[:3, 1]),
+        ),
+        "ImageOrientationPatient": image_orientation_patient.round(4),
+    }
+    metadatas = []
+    for sl in range(num_slices):
+        relative_image_position = lps_affine[:3, :3] @ np.asarray([0, 0, sl]).T
+        image_position_patient = relative_image_position + lps_affine[:3, 3]
+        metadatas.append(
+            {
+                **metadata,
+                "PatientPosition": "FFS",
+                "ImagePositionPatient": image_position_patient.round(4),
+                "SliceLocation": slice_thickness * sl,
+                # "InStackPositionNumber": sl + 1,
+                "InstanceNumber": sl + 1,
+            }
+        )
+
+        md = metadatas[-1]
+        for k, v in md.items():
+            if isinstance(v, np.ndarray):
+                v = v.flatten()
+            if isinstance(v, (np.ndarray, list, tuple)):
+                dtype = int if v[0].dtype in (np.int, np.int16, np.int32, np.int64) else float
+                md[k] = [dtype(x) for x in v]
+
+    return metadatas
