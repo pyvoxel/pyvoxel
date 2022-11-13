@@ -636,7 +636,6 @@ def add_dicom_headers(
     mv: MedicalVolume,
     *,
     modality: str,
-    high_bit: int,
     **metadata,
 ) -> MedicalVolume:
     """Add metadata and required DICOM tags to the MedicalVolume.
@@ -657,16 +656,27 @@ def add_dicom_headers(
     Returns:
         MedicalVolume: The medical volume with DICOM headers added.
     """
-    min_val = np.min(mv.A)
-    max_val = np.max(mv.A)
-    window_center = (min_val + max_val) / 2
-    window_width = max_val - min_val
-
     # Convert inputs xval_yval to XvalYval following pydicom syntax.
     def _split_and_capitalize(x):
         return "".join([s.capitalize() for s in x.split("_")])
 
     metadata = {_split_and_capitalize(k) if "_" in k else k: v for k, v in metadata.items()}
+
+    min_val = np.min(mv.A)
+    max_val = np.max(mv.A)
+    window_center = (min_val + max_val) / 2
+    window_width = max_val - min_val
+
+    dtype = mv.dtype
+    dtype = getattr(np, dtype.name)
+    nbits = dtype(0).nbytes * 8
+    high_bit = metadata.get("HighBit", None)
+    if high_bit is not None and high_bit > nbits:
+        raise ValueError(f"high_bit cannot be greater than {nbits}")
+    if high_bit is None:
+        # TODO: Change this to be based on the dynamic range of the data.
+        # This should also handle data with negative values.
+        metadata["HighBit"] = nbits
 
     metadata = dict(metadata)
     default_metadata = {
@@ -699,11 +709,10 @@ def add_dicom_headers(
         "PixelRepresentation": 1,
         "SamplesPerPixel": 1,
         "PhotometricInterpretation": "MONOCHROME2",
-        "BitsAllocated": 16,
-        "BitsStored": 16,
-        "HighBit": high_bit,
-        "SmallestImagePixelValue": int(np.int16(min_val.round())),
-        "LargestImagePixelValue": int(np.int16(max_val.round())),
+        "BitsAllocated": nbits,
+        "BitsStored": nbits,
+        "SmallestImagePixelValue": int(min_val.round()),
+        "LargestImagePixelValue": int(max_val.round()),
         "WindowCenter": float(window_center.round()),
         "WindowWidth": float(window_width.round()),
     }
