@@ -66,6 +66,12 @@ class TestMedicalVolume(unittest.TestCase):
         mv2 = mv.reformat(new_orientation).reformat(mv.orientation)
         assert mv2.is_identical(mv)
 
+        mv2 = mv.reformat(*new_orientation).reformat(*mv.orientation)
+        assert mv2.is_identical(mv)
+
+        with self.assertRaises(ValueError):
+            mv.reformat(new_orientation, True)
+
     def test_reformat_as(self):
         mv = MedicalVolume(np.random.rand(10, 20, 30), self._AFFINE)
         mv2 = MedicalVolume(np.random.rand(10, 20, 30), self._AFFINE[:, (0, 2, 1, 3)])
