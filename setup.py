@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import subprocess
 import sys
 from shutil import rmtree
 
@@ -35,6 +36,8 @@ def get_version():
 class UploadCommand(Command):
     """Support setup.py upload.
 
+    Only run upload from the main branch.
+
     Adapted from https://github.com/robustness-gym/meerkat.
     """
 
@@ -53,6 +56,16 @@ class UploadCommand(Command):
         pass
 
     def run(self):
+        # Only upload from the main branch
+        branches = subprocess.getoutput("git branch").split("\n")
+        branches = [x.strip() for x in branches]
+        curr_branch = [x for x in branches if x.startswith("*")]
+        if len(curr_branch) != 1:
+            raise RuntimeError("Could not determine current branch.")
+        curr_branch = curr_branch[0].split(" ")[-1]
+        if curr_branch != "main":
+            raise RuntimeError("Uploads only allowed from main branch.")
+
         try:
             self.status("Removing previous builds…")
             rmtree(os.path.join(here, "dist"))
@@ -127,7 +140,7 @@ setup(
     name="pyvoxel",
     version=get_version(),
     author="Arjun Desai",
-    url="https://github.com/voxelimaging/pyvoxel",
+    url="https://github.com/pyvoxel/pyvoxel",
     project_urls={"Documentation": "https://pyvoxel.readthedocs.io/"},
     description="An AI-powered open-source medical image analysis toolbox",
     long_description=long_description,
