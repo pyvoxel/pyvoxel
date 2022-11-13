@@ -1,6 +1,7 @@
 [run]
 omit =
     *test*
+    voxel/experimental/*
 
 [report]
 include =
