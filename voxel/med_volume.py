@@ -1079,7 +1079,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         """
         from voxel.numpy_routines import ascontiguousarray
 
-        if self.A.data.contiguous:
+        if self.contiguous():
             return self
         return ascontiguousarray(self)
 
@@ -1089,7 +1089,9 @@ class MedicalVolume(NDArrayOperatorsMixin):
         Returns:
             bool: Whether the pixel data is contiguous in memory.
         """
-        return self.A.data.contiguous
+        from voxel.numpy_routines import is_contiguous
+
+        return is_contiguous(self)
 
     @property
     def A(self):

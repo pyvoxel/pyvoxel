@@ -4,6 +4,7 @@ from typing import Sequence, Union
 
 import numpy as np
 
+from voxel.device import cpu_device
 from voxel.med_volume import MedicalVolume
 
 __all__ = [
@@ -626,6 +627,27 @@ def ascontiguousarray(a, dtype=None, *, like=None):
     if like is not None:
         raise ValueError("Does not support `like` argument.")
     return a._partial_clone(volume=np.ascontiguousarray(a.A, dtype=dtype))
+
+
+def is_contiguous(x: MedicalVolume) -> bool:
+    """Check if the pixel array is contiguous.
+
+    If the underlying array (``mv.A``) is a CuPy array,
+    returns ``True`` iff the array is C contiguous.
+
+    Args:
+        a (MedicalVolume): Input volume.
+
+    Returns:
+        bool: ``True`` if the pixel array is contiguous.
+    """
+    if x.device == cpu_device:
+        # numpy
+        return x.A.data.contiguous
+    else:
+        # cupy
+        # TODO: check if it is sufficient to check c_contiguous
+        return x.A.flags.c_contiguous
 
 
 def _to_positive_axis(
