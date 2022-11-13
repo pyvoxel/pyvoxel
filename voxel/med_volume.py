@@ -1079,7 +1079,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         """
         from voxel.numpy_routines import ascontiguousarray
 
-        if self.contiguous():
+        if self.is_contiguous():
             return self
         return ascontiguousarray(self)
 
