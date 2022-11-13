@@ -8,10 +8,10 @@ import numpy as np
 import pydicom
 from pydicom.data import get_testdata_file
 
-from voxel.io.dicom import DicomReader, DicomWriter
+from voxel.io.dicom import DicomReader, DicomWriter, add_dicom_headers
 from voxel.io.format_io import ImageDataFormat
 from voxel.med_volume import MedicalVolume
-from voxel.orientation import to_RAS_affine
+from voxel.orientation import to_affine, to_RAS_affine
 
 from .. import util as ututils
 
@@ -609,6 +609,53 @@ class TestDicomIO(ututils.TempPathMixin):
 
         with self.assertRaises(NotADirectoryError):
             dr.get_files(out_dir / "some-folder")
+
+    def test_dicom_write_custom_headers(self):
+        arr = np.round(np.random.randn(10, 10, 10) * 1000).astype(np.int16)
+        affine = to_affine(("AP", "SI", "LR"))
+        dummy_uuid = str(pydicom.uid.generate_uid())
+
+        mv = MedicalVolume(arr, affine)
+        mv = add_dicom_headers(
+            mv,
+            modality="MR",
+            high_bit=12,
+            SeriesNumber=1,
+            SeriesInstanceUID=dummy_uuid,
+            StudyInstanceUID=dummy_uuid,
+        )
+
+        assert mv.headers() is not None
+        assert mv.get_metadata("SeriesNumber") == 1
+        assert mv.get_metadata("HighBit") is not None
+
+        dw = DicomWriter()
+        out_dir = os.path.join(self.data_dirpath, "test_dicom_write_custom_headers")
+        dw.save(mv, dir_path=out_dir)
+
+        dr = DicomReader()
+        mv2 = dr.load(out_dir)
+        assert mv2.is_identical(mv)
+
+
+def test_add_dicom_headers():
+    arr = np.round(np.random.randn(10, 10, 10) * 1000).astype(np.int16)
+    affine = to_affine(("AP", "SI", "LR"))
+    dummy_uuid = str(pydicom.uid.generate_uid())
+
+    mv = MedicalVolume(arr, affine)
+    mv = add_dicom_headers(
+        mv,
+        modality="MR",
+        high_bit=12,
+        SeriesNumber=1,
+        SeriesInstanceUID=dummy_uuid,
+        StudyInstanceUID=dummy_uuid,
+    )
+
+    assert mv.headers() is not None
+    assert mv.get_metadata("SeriesNumber") == 1
+    assert mv.get_metadata("HighBit") is not None
 
 
 if __name__ == "__main__":
