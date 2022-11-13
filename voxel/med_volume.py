@@ -183,7 +183,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         writer = vio.get_writer(data_format)
         writer.save(self, file_path)
 
-    def reformat(self, new_orientation: Sequence, inplace: bool = False) -> "MedicalVolume":
+    def reformat(self, new_orientation: Sequence, *args, inplace: bool = False) -> "MedicalVolume":
         """Reorients volume to a specified orientation.
 
         Flipping and transposing the volume array (``self.volume``) returns a view if possible.
@@ -216,6 +216,14 @@ class MedicalVolume(NDArrayOperatorsMixin):
         xp = self.device.xp
         device = self.device
         headers = self._headers
+
+        if len(args):
+            if any(isinstance(x, bool) for x in args):
+                raise ValueError(
+                    "`inplace` is a keyword only argument. Use `inplace=` to specify "
+                    "if the operation should be in-place."
+                )
+            new_orientation = (new_orientation, *args)
 
         new_orientation = tuple(new_orientation)
         if new_orientation == self.orientation:
