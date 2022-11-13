@@ -140,7 +140,7 @@ setup(
     name="pyvoxel",
     version=get_version(),
     author="Arjun Desai",
-    url="https://github.com/voxelimaging/pyvoxel",
+    url="https://github.com/pyvoxel/pyvoxel",
     project_urls={"Documentation": "https://pyvoxel.readthedocs.io/"},
     description="An AI-powered open-source medical image analysis toolbox",
     long_description=long_description,
