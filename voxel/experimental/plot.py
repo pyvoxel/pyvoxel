@@ -1,3 +1,5 @@
+from typing import Dict
+
 import numpy as np
 
 from voxel.device import cpu_device
@@ -17,18 +19,17 @@ _IS_IPYTHON_SESSION = None
 
 
 class Axis:
-    def __init__(self, size=(500, 500)) -> None:
+    def __init__(self) -> None:
         if not _SUPPORTS_VOXELVIZ:
             # TODO: I think the user also has to install ipywidgets.
+            # TODO: Add figsize
             raise ImportError(
                 "`voxelviz` is not installed. To install, use `pip install voxelviz`."
             )
         if not _is_ipython_session():
             raise RuntimeError("The viewer can only be used in an iPython session.")
 
-        self.size = size
-
-    def show(self, volume: MedicalVolume, *, seg: MedicalVolume = None):
+    def show(self, volume: MedicalVolume, *, seg: MedicalVolume = None, cfg: Dict = {}):
         """Display a multi-dimensional volume with optional segmentation overlay.
 
         Args:
@@ -57,18 +58,20 @@ class Axis:
             if np.any(seg.A < 0):
                 raise ValueError("The segmentation must be non-negative.")
 
+        spacing = volume.pixel_spacing
         volume = _auto_reshape(volume)
 
         vw = VoxelWidget()
-        vw.volume = volume
+        vw.vol = volume
         if seg is not None:
             seg = _auto_reshape(seg)
             vw.seg = seg
 
+        vw.cfg = {"spacing": [spacing[-1]] + list(spacing[0:2])}
         return vw
 
 
-def show(volume: MedicalVolume, *, seg: MedicalVolume = None, figsize=(500, 500)):
+def show(volume: MedicalVolume, *, seg: MedicalVolume = None):
     """Display a multi-dimensional volume with optional segmentation overlay.
 
     Args:
@@ -77,7 +80,7 @@ def show(volume: MedicalVolume, *, seg: MedicalVolume = None, figsize=(500, 500)
             If specified, all entries must be non-negative integers.
             ``0`` corresponds to background.
     """
-    ax = Axis(size=figsize)
+    ax = Axis()
     return ax.show(volume, seg=seg)
 
 
