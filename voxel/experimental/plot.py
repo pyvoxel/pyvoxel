@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 
 from voxel.device import cpu_device
@@ -29,7 +27,7 @@ class Axis:
         if not _is_ipython_session():
             raise RuntimeError("The viewer can only be used in an iPython session.")
 
-    def show(self, volume: MedicalVolume, *, seg: MedicalVolume = None, cfg: Dict = {}):
+    def show(self, volume: MedicalVolume, *, seg: MedicalVolume = None):
         """Display a multi-dimensional volume with optional segmentation overlay.
 
         Args:
@@ -67,7 +65,7 @@ class Axis:
             seg = _auto_reshape(seg)
             vw.seg = seg
 
-        vw.cfg = {"spacing": [spacing[-1]] + list(spacing[0:2])}
+        vw.cfg = {"spacing": list(spacing)}
         return vw
 
 
