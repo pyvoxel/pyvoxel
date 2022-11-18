@@ -70,7 +70,7 @@ class ImageDataFormat(enum.Enum):
         # have been created yet.
         file_or_dir_path = str(file_or_dir_path)
         filename_base, ext = os.path.splitext(file_or_dir_path)
-        if filename_base == file_or_dir_path:
+        if filename_base == file_or_dir_path or os.path.isdir(file_or_dir_path):
             return ImageDataFormat.dicom
 
         raise ValueError(f"Unknown data format for {file_or_dir_path}")
