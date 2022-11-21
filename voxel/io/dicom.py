@@ -7,10 +7,6 @@ Note:
     1. Dicom utilizes LPS convention:
         - LPS: right --> left, anterior --> posterior, inferior --> superior
         - we will call it LPS+, such that letters correspond to increasing end of axis
-
-Attributes:
-    TOTAL_NUM_ECHOS_KEY (tuple[int]): Hexadecimal encoding of DICOM tag corresponding
-        to number of echos.
 """
 
 import copy
@@ -35,7 +31,6 @@ from voxel.med_volume import MedicalVolume
 
 __all__ = ["DicomReader", "DicomWriter"]
 
-TOTAL_NUM_ECHOS_KEY = (0x19, 0x107E)
 PATH_LIKE = (str, os.PathLike)
 
 
