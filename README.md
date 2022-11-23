@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/pyvoxel/pyvoxel/branch/master/graph/badge.svg?token=X2FRQJHV2M)](https://codecov.io/gh/pyvoxel/pyvoxel)
 [![Documentation Status](https://readthedocs.org/projects/pyvoxel/badge/?version=latest)](https://pyvoxel.readthedocs.io/en/latest/?badge=latest)
 
-[Documentation](http://dosma.readthedocs.io/) | [Installation](https://pyvoxel.readthedocs.io/en/latest/introduction.html) | [Basic Usage](https://pyvoxel.readthedocs.io/en/latest/user_guide.html)
+[Documentation](http://pyvoxel.readthedocs.io/) | [Installation](https://pyvoxel.readthedocs.io/en/latest/introduction.html) | [Basic Usage](https://pyvoxel.readthedocs.io/en/latest/user_guide.html)
 
 Voxel provides fast Pythonic data structures and tools for wrangling with medical images.
 
