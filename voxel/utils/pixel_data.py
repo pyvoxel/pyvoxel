@@ -115,7 +115,8 @@ def apply_window(
     elif mode == "sigmoid":
         if ww <= 0:
             raise ValueError("Window Width must be greater than 0 for SIGMOID.")
-        volume[:] = ww / (1 + xp.exp(-4 * (volume - wc) / ww)) + y_min
+        volume[:] = y_range / (1 + xp.exp(-4 * (volume - wc) / ww)) + y_min
+
     else:
         raise ValueError(f"VOI LUT Function {mode} is not supported.")
 
