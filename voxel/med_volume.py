@@ -397,7 +397,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 raise ValueError(
                     "Shapes not equal: {}, {}".format(self._volume.shape, mv._volume.shape)
                 )
-            assert False  # should not reach here
+            raise AssertionError()  # should not reach here
 
         return out
 
