@@ -25,12 +25,13 @@ TEMP_PATH = os.path.join(
     UNITTEST_SCANDATA_PATH, f"temp-{str(uuid.uuid1())}-{str(uuid.uuid4())}"
 )  # should be used when for writing with assert_raises clauses
 
-SCANS = ["qdess", "mapss", "cubequant", "cones"]
+SCANS = ["qdess", "mapss", "cubequant", "cones", "enhanced"]
 SCANS_INFO = {
     "mapss": {"expected_num_echos": 7},
     "qdess": {"expected_num_echos": 2},
     "cubequant": {"expected_num_echos": 4},
     "cones": {"expected_num_echos": 4},
+    "enhanced": {"expected_num_echos": 17},
 }
 
 SCAN_DIRPATHS = [os.path.join(UNITTEST_SCANDATA_PATH, x) for x in SCANS]
