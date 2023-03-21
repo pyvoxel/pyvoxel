@@ -5,7 +5,14 @@ import pydicom
 
 from voxel.device import get_array_module
 
-__all__ = ["apply_rescale", "apply_window", "pixel_dtype", "pixel_range", "invert"]
+__all__ = [
+    "apply_rescale",
+    "apply_window",
+    "pixel_dtype",
+    "pixel_range",
+    "invert",
+    "invert_window",
+]
 
 
 def pixel_dtype(ds: "pydicom.Dataset") -> np.dtype:
@@ -84,6 +91,7 @@ def apply_window(
         width (float): Window width.
         output_range (Tuple[float, float]): Output range.
         mode (str, optional): VOI LUT function. Defaults to None.
+        inplace (bool, optional): Whether to apply the window in place. Defaults to False.
 
     Returns:
         np.ndarray: Windowed volume.
@@ -110,12 +118,28 @@ def apply_window(
     volume = volume if inplace else volume.copy()
     xp = get_array_module(volume)
     if mode in ["linear", "linear_exact"]:
-        xp.clip(volume, lb, ub, out=volume)
-        volume[:] = ((volume - wc) / ww + 0.5) * y_range + y_min
+        volume -= wc
+        volume /= ww
+        volume += 0.5
+        xp.clip(volume, 0, 1, out=volume)
+
+        if y_range != 1:
+            volume *= y_range
+
+        if y_min != 0:
+            volume += y_min
+
     elif mode == "sigmoid":
         if ww <= 0:
             raise ValueError("Window Width must be greater than 0 for SIGMOID.")
-        volume[:] = y_range / (1 + xp.exp(-4 * (volume - wc) / ww)) + y_min
+
+        # volume[:] = y_range / (1 + xp.exp(-4 * (volume - wc) / ww)) + y_min
+        volume -= wc
+        volume *= -4 / wc
+        xp.exp(volume, out=volume)
+        volume += 1
+        xp.divide(y_range, volume, out=volume)
+        volume += y_min
 
     else:
         raise ValueError(f"VOI LUT Function {mode} is not supported.")
@@ -150,7 +174,7 @@ def apply_rescale(
 
 def invert(
     volume: np.ndarray,
-    pixel_range: Tuple[float, float] = None,
+    output_range: Tuple[float, float] = None,
     inplace: bool = False,
 ) -> np.ndarray:
     """Invert the pixel values in a volume.
@@ -163,11 +187,61 @@ def invert(
     Returns:
         np.ndarray: Inverted volume.
     """
-    if pixel_range is None:
-        pixel_range = volume.min(), volume.max()
+    if not inplace:
+        volume = volume.copy()
 
-    y_min, y_max = pixel_range
-    volume = volume if inplace else volume.copy()
-    volume[:] = y_max - volume + y_min
+    x_min, x_max = volume.min(), volume.max()
+    x_range = x_max - x_min
+
+    volume -= x_min
+    volume /= x_range
+
+    xp = get_array_module(volume)
+    xp.subtract(1, volume, out=volume)
+
+    # Rescale to output range
+    if output_range is None:
+        output_range = (x_min, x_max)
+
+    if output_range != (0, 1):
+        lb, ub = output_range
+        volume *= ub - lb
+        volume += lb
 
     return volume
+
+
+def invert_window(
+    volume: np.ndarray,
+    center: float,
+    width: float,
+    output_range: Tuple[float, float] = None,
+) -> Tuple[float, float]:
+    """Invert the window parameters.
+
+    Args:
+        volume (np.ndarray): Volume to invert the window for.
+        center (float): Window center.
+        width (float): Window width.
+        output_range (Tuple[float, float], optional): Output range. Defaults to None.
+
+    Returns:
+        Tuple[float, float]: Inverted window parameters.
+    """
+    x_min, x_max = volume.min(), volume.max()
+    x_range = x_max - x_min
+
+    # Rescale the window
+    center = 1 - ((center - x_min) / x_range)
+    width = width / x_range
+
+    # Rescale to output range
+    if output_range is None:
+        output_range = (x_min, x_max)
+
+    if output_range != (0, 1):
+        lb, ub = output_range
+        center = center * (ub - lb) + lb
+        width = width * (ub - lb)
+
+    return center, width
