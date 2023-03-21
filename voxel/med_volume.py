@@ -22,7 +22,7 @@ import voxel as vx
 import voxel.orientation as stdo
 from voxel.device import Device, cpu_device, get_array_module, get_device, to_device
 from voxel.utils import env
-from voxel.utils.pixel_data import apply_rescale, apply_window, invert
+from voxel.utils.pixel_data import apply_rescale, apply_window, invert, invert_window
 
 if env.sitk_available():
     import SimpleITK as sitk
@@ -729,7 +729,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self._headers.flatten()
         return self._headers
 
-    def get_metadata(self, key, dtype=None, default=np._NoValue):
+    def get_metadata(self, key, index: int = None, dtype=None, default=np._NoValue):
         """Get metadata value from first header.
 
         The first header is defined as the first header in ``np.flatten(self._headers)``.
@@ -768,9 +768,14 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return default
         else:
             element = headers[0][key]
+
         val = element.value
+        if isinstance(val, list) and index is not None:
+            val = val[index]
+
         if dtype is not None:
             val = dtype(val)
+
         return val
 
     def set_metadata(self, key, value, force: bool = False):
@@ -867,7 +872,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         center: float = None,
         width: float = None,
         output_range: Tuple[float, float] = None,
-        voi_lut_function: str = None,
+        mode: str = None,
         dtype: np.dtype = None,
         inplace: bool = False,
         sync: bool = True,
@@ -883,7 +888,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 use the value in the header.
             output_range (Tuple[float, float], optional): Output range to
                 apply window to. If ``None``, will use the value in the header.
-            voi_lut_function (str, optional): VOI LUT function. If ``None``, will
+            mode (str, optional): VOI LUT function. If ``None``, will
                 use the value in the header.
             dtype (np.dtype, optional): Data type to cast volume to before
                 window is applied.
@@ -897,7 +902,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self
 
         # Define the window center, window width, and VOI LUT function
-        wc, ww, vlf = center, width, voi_lut_function
+        wc, ww, vlf = center, width, mode
         if self._headers is not None:
             h: pydicom.Dataset = self._headers.flat[0]
             if center is None:
@@ -914,7 +919,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 ww = h["WindowWidth"]
                 ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
 
-            if voi_lut_function is None:
+            if mode is None:
                 vlf = h.get("VOILUTFunction", None)
 
         # Apply the window transformation
@@ -950,7 +955,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
     def to_grayscale(
         self,
         mode: str = "MONOCHROME2",
-        pixel_range: Tuple[float, float] = None,
+        output_range: Tuple[float, float] = None,
         inplace: bool = False,
         sync: bool = True,
     ) -> "MedicalVolume":
@@ -967,11 +972,30 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self
 
         mv = self if inplace else self.clone()
-        invert(mv._volume, pixel_range, inplace=True)
-
         if sync:
+            # Toggle the photometric interpretation
             mv.set_metadata("PhotometricInterpretation", mode)
 
+            # Update the window center and width
+            center = np.array(h.get("WindowCenter", [])).flatten()
+            width = np.array(h.get("WindowWidth", [])).flatten()
+
+            if len(center) > 0 and len(width) > 0:
+                wcs, wws = [], []
+                for wc, ww in zip(center, width):
+                    new_wc, new_ww = invert_window(mv._volume, wc, ww, output_range)
+                    wcs.append(new_wc)
+                    wws.append(new_ww)
+
+                if len(wcs) == 1:
+                    wcs, wws = wcs[0], wws[0]
+
+                mv.set_metadata("WindowCenter", wcs)
+                mv.set_metadata("WindowWidth", wws)
+                mv.set_metadata("VOILUTFunction", "LINEAR_EXACT", force=True)
+
+        # Invert the volume
+        invert(mv._volume, output_range, inplace=True)
         return mv
 
     def materialize(self):
