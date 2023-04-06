@@ -34,6 +34,62 @@ __all__ = ["DicomReader", "DicomWriter"]
 PATH_LIKE = (str, os.PathLike)
 
 
+def _flatten_data(d, new_dataset=None):
+    """Flatten a pydicom dataset into a single level dictionary."""
+    if new_dataset is None:
+        new_dataset = pydicom.Dataset()
+        new_dataset.is_little_endian = d.is_little_endian
+        new_dataset.is_implicit_VR = d.is_implicit_VR
+        new_dataset.file_meta = copy.deepcopy(d.file_meta)
+        new_dataset.file_meta.MediaStorageSOPClassUID = (
+            "1.2.840.10008.5.1.4.1.1.4"  # non-enhanced ClassUID
+        )
+        new_dataset.ensure_file_meta()
+    for element in d.iterall():
+        if not isinstance(element.value, pydicom.sequence.Sequence):
+            new_dataset.add(element)
+    return new_dataset
+
+
+def _separate_enhanced_slices(data_in):
+    """Separate enhanced dicom slices into individual slices."""
+    d = copy.copy(data_in)
+    slice_data = d[(0x5200, 0x9230)]
+    d.pop((0x5200, 0x9230))
+
+    try:
+        d.decompress()
+    except NotImplementedError:
+        pass
+
+    pixel_data = d.pixel_array.astype(np.uint16)
+
+    if pixel_data.ndim > 2:
+        pixel_data = pixel_data.transpose([1, 2, 0])
+    else:
+        pixel_data = np.expand_dims(pixel_data, -1)
+
+    d.pop((0x7FE0, 0x0010))
+    header_list = []
+    current_slice = 0
+    for slice_header in slice_data:
+        new_slice_header = _flatten_data(d)
+        _flatten_data(slice_header, new_slice_header)
+        new_slice_header.NumberOfFrames = 1
+        new_slice_header.PixelData = pixel_data[:, :, current_slice].tostring()
+        header_list.append(new_slice_header)
+        current_slice += 1
+    return header_list
+
+
+def _safe_dicom_read(file_path, force=True):
+    """Read a dicom file without crashing if a non-dicom file is encountered."""
+    try:
+        return pydicom.read_file(file_path, force=force)
+    except pydicom.errors.InvalidDicomError:
+        return None
+
+
 class DicomReader(DataReader):
     """A class for reading DICOM files.
 
@@ -211,7 +267,8 @@ class DicomReader(DataReader):
                 Dicom file(s) can either be the path or the bytes from the opened file.
             group_by (:obj:`str(s)` or :obj:`int(s)`, optional): DICOM attribute(s) used
                 to group dicoms. This can be the attribute tag name (str) or tag
-                number (int). Defaults to ``self.group_by``.
+                number (int).  For Philips enhanced DICOM datasets,
+                a good choice if the Frame ID: [(0x2005, 0x1011)] Defaults to ``self.group_by``.
             sort_by (:obj:`str(s)` or :obj:`int(s)`, optional): DICOM attribute(s) used
                 to sort dicoms. This sorting is done after sorting files in alphabetical
                 order. Defaults to ``self.sort_by``.
@@ -256,7 +313,7 @@ class DicomReader(DataReader):
             )
 
         if self.num_workers:
-            fn = functools.partial(pydicom.read_file, force=True)
+            fn = functools.partial(_safe_dicom_read, force=True)
             if self.verbose:
                 dicom_slices = process_map(fn, lst_files_dicom, max_workers=self.num_workers)
             else:
@@ -264,15 +321,40 @@ class DicomReader(DataReader):
                     dicom_slices = p.map(fn, lst_files_dicom)
         else:
             dicom_slices = [
-                pydicom.read_file(fp, force=True)
+                _safe_dicom_read(fp, force=True)
                 for fp in tqdm(lst_files_dicom, disable=not self.verbose)
             ]
 
-        # Check if dicom file has the group_by element specified
-        temp_dicom = dicom_slices[0]
-        for _group in group_by:
-            if _group not in temp_dicom:
-                raise KeyError(f"Tag {_group} does not exist in dicom")
+        # remove the failed files from the list
+        dicom_slices = list(filter(lambda x: x is not None, dicom_slices))
+
+        # check if the dicom dataset is enhanced
+        new_dicom_slices = []
+        group_by_checked = False
+        for dataset in dicom_slices:
+            if (2, 2) in dataset.file_meta and dataset.file_meta[
+                (2, 2)
+            ].value == "1.2.840.10008.5.1.4.1.1.4.1":  # Media Storage SOP Class UID == Enhanced MR Image Storage
+                new_dicom_slices.extend(_separate_enhanced_slices(dataset))
+                # check group_by again in case of enhanced dicom.
+                # One might check to do it once only but it's a very small performance penalty
+                for _group in group_by:
+                    if _group not in new_dicom_slices[0]:
+                        raise KeyError(f"Tag {_group} does not exist in dicom")
+            else:
+                if not group_by_checked:
+                    for _group in group_by:
+                        if _group not in dataset:
+                            raise KeyError(f"Tag {_group} does not exist in dicom")
+                    group_by_checked = True
+                new_dicom_slices.append(dataset)
+
+        dicom_slices = new_dicom_slices
+
+        print(
+            "----------------------------------------------- FFFFFFFFFFFFF --------------------------------"
+        )
+        print(len(dicom_slices))
 
         if sort_by:
             try:

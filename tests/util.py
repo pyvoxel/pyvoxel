@@ -25,12 +25,13 @@ TEMP_PATH = os.path.join(
     UNITTEST_SCANDATA_PATH, f"temp-{str(uuid.uuid1())}-{str(uuid.uuid4())}"
 )  # should be used when for writing with assert_raises clauses
 
-SCANS = ["qdess", "mapss", "cubequant", "cones"]
+SCANS = ["qdess", "mapss", "cubequant", "cones", "enhanced"]
 SCANS_INFO = {
     "mapss": {"expected_num_echos": 7},
     "qdess": {"expected_num_echos": 2},
     "cubequant": {"expected_num_echos": 4},
     "cones": {"expected_num_echos": 4},
+    "enhanced": {"expected_num_echos": 17},
 }
 
 SCAN_DIRPATHS = [os.path.join(UNITTEST_SCANDATA_PATH, x) for x in SCANS]
@@ -42,9 +43,17 @@ DECIMAL_PRECISION = 1  # (+/- 0.1ms)
 _IS_ELASTIX_AVAILABLE = None
 
 
-def is_data_available():
+def is_data_available(scan: str = ""):
     disable_data = os.environ.get("VOXEL_UNITTEST_DISABLE_DATA", "").lower() == "true"
-    return not disable_data and os.path.isdir(UNITTEST_DATA_PATH)
+    if disable_data:
+        return True
+    if scan:
+        return os.path.isdir(os.path.join(UNITTEST_SCANDATA_PATH, scan))
+    else:
+        for test_path in SCAN_DIRPATHS:
+            if not os.path.isdir(test_path):
+                return False
+        return True
 
 
 def get_scan_dirpath(scan: str):
