@@ -367,7 +367,7 @@ def concatenate(xs, axis: int = -1):
     else:
         headers = np.concatenate(headers, axis=axis)
         if headers.ndim != volume.ndim or any(
-            [hs != 1 and hs != vs for hs, vs in zip(headers.shape, volume.shape)]
+            hs != 1 and hs != vs for hs, vs in zip(headers.shape, volume.shape)
         ):
             warnings.warn(
                 "Got invalid headers shape ({}) given concatenated output shape ({}). "
