@@ -8,7 +8,7 @@ import warnings
 from copy import deepcopy
 from mmap import mmap
 from numbers import Number
-from typing import TYPE_CHECKING, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union
 
 import nibabel as nib
 import numpy as np
@@ -1723,6 +1723,43 @@ class MedicalVolume(NDArrayOperatorsMixin):
             f"ornt={self.orientation}),{nltb}spacing={self.pixel_spacing},{nltb}"
             f"origin={self.scanner_origin},{nltb}device={self.device}{nl})"
         )
+
+    def __tunnelvision__(
+        self, config: Dict[str, Any] = {}, **kwargs
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        # Only 3D and 5D volumes are supported, as we want to "reformat" for tunnelvision for now
+        if self._volume.ndim not in [3, 5]:
+            raise ValueError("Ambiguous dims: reshape to [BxZxYxXxC] or a permutation of [ZxYxX]")
+
+        # Reformat and convert Zarr, CuPy, Torch tensors to NumPy
+        # TODO: remove reformatting once Voxel supports arbitrary orientations
+        clone = self.clone().reformat(("IS", "AP", "RL"))
+        clone._volume = np.asarray(clone._volume)
+
+        # Parse the relevant headers
+        spacing = clone.pixel_spacing[::-1]
+
+        ri = clone.get_metadata("RescaleIntercept", dtype=float, default=0)
+        rs = clone.get_metadata("RescaleSlope", dtype=float, default=1)
+
+        ma, mi = np.amax(clone._volume) * rs + ri, np.amin(clone._volume) * rs + ri
+        dynamic_range = ma - mi
+        ww = clone.get_metadata("WindowWidth", dtype=float, default=dynamic_range)
+        wc = clone.get_metadata("WindowCenter", dtype=float, default=dynamic_range / 2 + mi)
+
+        # Display the volume
+        x = np.ascontiguousarray(clone._volume)
+        if x.ndim == 3:
+            x = x[np.newaxis, ..., np.newaxis]
+
+        config = {
+            "spacing": spacing,
+            "rescale": {"intercept": ri, "slope": rs},
+            "window": {"center": wc, "width": ww},
+            **config,
+        }
+
+        return (x, {"config": config, **kwargs})
 
     def _iops(self, other, op):
         """Helper function for i-type ops (__iadd__, __isub__, etc.)"""
