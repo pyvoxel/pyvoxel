@@ -1739,13 +1739,24 @@ class MedicalVolume(NDArrayOperatorsMixin):
         # Parse the relevant headers
         spacing = clone.pixel_spacing[::-1]
 
-        ri = clone.get_metadata("RescaleIntercept", dtype=float, default=0)
-        rs = clone.get_metadata("RescaleSlope", dtype=float, default=1)
+        ri = clone.get_metadata("RescaleIntercept", default=0)
+        if isinstance(ri, pydicom.multival.MultiValue):
+            ri = ri[0]
+
+        rs = clone.get_metadata("RescaleSlope", default=1)
+        if isinstance(rs, pydicom.multival.MultiValue):
+            rs = rs[0]
 
         ma, mi = np.amax(clone._volume) * rs + ri, np.amin(clone._volume) * rs + ri
         dynamic_range = ma - mi
-        ww = clone.get_metadata("WindowWidth", dtype=float, default=dynamic_range)
-        wc = clone.get_metadata("WindowCenter", dtype=float, default=dynamic_range / 2 + mi)
+
+        ww = clone.get_metadata("WindowWidth", default=dynamic_range)
+        if isinstance(ww, pydicom.multival.MultiValue):
+            ww = ww[0]
+
+        wc = clone.get_metadata("WindowCenter", default=dynamic_range / 2 + mi)
+        if isinstance(wc, pydicom.multival.MultiValue):
+            wc = wc[0]
 
         # Display the volume
         x = np.ascontiguousarray(clone._volume)
@@ -1754,8 +1765,8 @@ class MedicalVolume(NDArrayOperatorsMixin):
 
         config = {
             "spacing": spacing,
-            "rescale": {"intercept": ri, "slope": rs},
-            "window": {"center": wc, "width": ww},
+            "rescale": {"intercept": float(ri), "slope": float(rs)},
+            "window": {"center": float(wc), "width": float(ww)},
             **config,
         }
 
