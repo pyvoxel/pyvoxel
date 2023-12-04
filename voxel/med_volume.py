@@ -1750,11 +1750,11 @@ class MedicalVolume(NDArrayOperatorsMixin):
         ma, mi = np.amax(clone._volume) * rs + ri, np.amin(clone._volume) * rs + ri
         dynamic_range = ma - mi
 
-        ww = clone.get_metadata("WindowWidth", dtype=float, default=dynamic_range)
+        ww = clone.get_metadata("WindowWidth", default=dynamic_range)
         if isinstance(ww, pydicom.multival.MultiValue):
             ww = ww[0]
 
-        wc = clone.get_metadata("WindowCenter", dtype=float, default=dynamic_range / 2 + mi)
+        wc = clone.get_metadata("WindowCenter", default=dynamic_range / 2 + mi)
         if isinstance(wc, pydicom.multival.MultiValue):
             wc = wc[0]
 
