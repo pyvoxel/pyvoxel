@@ -8,7 +8,7 @@ import warnings
 from copy import deepcopy
 from mmap import mmap
 from numbers import Number
-from typing import TYPE_CHECKING, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union
 
 import nibabel as nib
 import numpy as np
@@ -22,7 +22,7 @@ import voxel as vx
 import voxel.orientation as stdo
 from voxel.device import Device, cpu_device, get_array_module, get_device, to_device
 from voxel.utils import env
-from voxel.utils.pixel_data import apply_rescale, apply_window, invert
+from voxel.utils.pixel_data import apply_rescale, apply_window, invert, invert_window
 
 if env.sitk_available():
     import SimpleITK as sitk
@@ -729,7 +729,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self._headers.flatten()
         return self._headers
 
-    def get_metadata(self, key, dtype=None, default=np._NoValue):
+    def get_metadata(self, key, index: int = None, dtype=None, default=np._NoValue):
         """Get metadata value from first header.
 
         The first header is defined as the first header in ``np.flatten(self._headers)``.
@@ -768,9 +768,14 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return default
         else:
             element = headers[0][key]
+
         val = element.value
+        if isinstance(val, list) and index is not None:
+            val = val[index]
+
         if dtype is not None:
             val = dtype(val)
+
         return val
 
     def set_metadata(self, key, value, force: bool = False):
@@ -867,7 +872,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
         center: float = None,
         width: float = None,
         output_range: Tuple[float, float] = None,
-        voi_lut_function: str = None,
+        mode: str = None,
         dtype: np.dtype = None,
         inplace: bool = False,
         sync: bool = True,
@@ -883,7 +888,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 use the value in the header.
             output_range (Tuple[float, float], optional): Output range to
                 apply window to. If ``None``, will use the value in the header.
-            voi_lut_function (str, optional): VOI LUT function. If ``None``, will
+            mode (str, optional): VOI LUT function. If ``None``, will
                 use the value in the header.
             dtype (np.dtype, optional): Data type to cast volume to before
                 window is applied.
@@ -897,7 +902,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self
 
         # Define the window center, window width, and VOI LUT function
-        wc, ww, vlf = center, width, voi_lut_function
+        wc, ww, vlf = center, width, mode
         if self._headers is not None:
             h: pydicom.Dataset = self._headers.flat[0]
             if center is None:
@@ -914,7 +919,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
                 ww = h["WindowWidth"]
                 ww = float(ww.value[index]) if ww.VM > 1 else float(ww.value)
 
-            if voi_lut_function is None:
+            if mode is None:
                 vlf = h.get("VOILUTFunction", None)
 
         # Apply the window transformation
@@ -950,7 +955,7 @@ class MedicalVolume(NDArrayOperatorsMixin):
     def to_grayscale(
         self,
         mode: str = "MONOCHROME2",
-        pixel_range: Tuple[float, float] = None,
+        output_range: Tuple[float, float] = None,
         inplace: bool = False,
         sync: bool = True,
     ) -> "MedicalVolume":
@@ -967,11 +972,30 @@ class MedicalVolume(NDArrayOperatorsMixin):
             return self
 
         mv = self if inplace else self.clone()
-        invert(mv._volume, pixel_range, inplace=True)
-
         if sync:
+            # Toggle the photometric interpretation
             mv.set_metadata("PhotometricInterpretation", mode)
 
+            # Update the window center and width
+            center = np.array(h.get("WindowCenter", [])).flatten()
+            width = np.array(h.get("WindowWidth", [])).flatten()
+
+            if len(center) > 0 and len(width) > 0:
+                wcs, wws = [], []
+                for wc, ww in zip(center, width):
+                    new_wc, new_ww = invert_window(mv._volume, wc, ww, output_range)
+                    wcs.append(new_wc)
+                    wws.append(new_ww)
+
+                if len(wcs) == 1:
+                    wcs, wws = wcs[0], wws[0]
+
+                mv.set_metadata("WindowCenter", wcs)
+                mv.set_metadata("WindowWidth", wws)
+                mv.set_metadata("VOILUTFunction", "LINEAR_EXACT", force=True)
+
+        # Invert the volume
+        invert(mv._volume, output_range, inplace=True)
         return mv
 
     def materialize(self):
@@ -1699,6 +1723,54 @@ class MedicalVolume(NDArrayOperatorsMixin):
             f"ornt={self.orientation}),{nltb}spacing={self.pixel_spacing},{nltb}"
             f"origin={self.scanner_origin},{nltb}device={self.device}{nl})"
         )
+
+    def __tunnelvision__(
+        self, config: Dict[str, Any] = {}, **kwargs
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        # Only 3D and 5D volumes are supported, as we want to "reformat" for tunnelvision for now
+        if self._volume.ndim not in [3, 5]:
+            raise ValueError("Ambiguous dims: reshape to [BxZxYxXxC] or a permutation of [ZxYxX]")
+
+        # Reformat and convert Zarr, CuPy, Torch tensors to NumPy
+        # TODO: remove reformatting once Voxel supports arbitrary orientations
+        clone = self.clone().reformat(("IS", "AP", "RL"))
+        clone._volume = np.asarray(clone._volume)
+
+        # Parse the relevant headers
+        spacing = clone.pixel_spacing[::-1]
+
+        ri = clone.get_metadata("RescaleIntercept", default=0)
+        if isinstance(ri, pydicom.multival.MultiValue):
+            ri = ri[0]
+
+        rs = clone.get_metadata("RescaleSlope", default=1)
+        if isinstance(rs, pydicom.multival.MultiValue):
+            rs = rs[0]
+
+        ma, mi = np.amax(clone._volume) * rs + ri, np.amin(clone._volume) * rs + ri
+        dynamic_range = ma - mi
+
+        ww = clone.get_metadata("WindowWidth", default=dynamic_range)
+        if isinstance(ww, pydicom.multival.MultiValue):
+            ww = ww[0]
+
+        wc = clone.get_metadata("WindowCenter", default=dynamic_range / 2 + mi)
+        if isinstance(wc, pydicom.multival.MultiValue):
+            wc = wc[0]
+
+        # Display the volume
+        x = np.ascontiguousarray(clone._volume)
+        if x.ndim == 3:
+            x = x[np.newaxis, ..., np.newaxis]
+
+        config = {
+            "spacing": spacing,
+            "rescale": {"intercept": float(ri), "slope": float(rs)},
+            "window": {"center": float(wc), "width": float(ww)},
+            **config,
+        }
+
+        return (x, {"config": config, **kwargs})
 
     def _iops(self, other, op):
         """Helper function for i-type ops (__iadd__, __isub__, etc.)"""

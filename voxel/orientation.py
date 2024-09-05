@@ -57,6 +57,7 @@ For example,
 For details on how the affine matrix is used for reformatting see
 :class:`voxel.MedicalVolume`.
 """
+import warnings
 from typing import List, Sequence, Tuple, Union
 
 import nibabel.orientations as nibo
@@ -347,30 +348,52 @@ def to_RAS_affine(headers: List[pydicom.FileDataset], default_ornt: Tuple[str, s
     Returns:
         np.ndarray: Affine matrix.
     """
-    try:
-        im_dir = headers[0].ImageOrientationPatient
-    except AttributeError:
-        im_dir = _decode_inplane_direction(headers, default_ornt=default_ornt)
-        if im_dir is None:
-            raise RuntimeError("Could not determine in-plane directions from headers.")
-    try:
-        in_plane_pixel_spacing = headers[0].PixelSpacing
-    except AttributeError:
-        try:
-            in_plane_pixel_spacing = headers[0].ImagerPixelSpacing
-        except AttributeError:
-            raise RuntimeError(
-                "Could not determine in-plane pixel spacing from headers. "
-                "Neither attribute 'PixelSpacing' nor 'ImagerPixelSpacing' found."
-            )
+
+    # The location of the DICOM attributes relevant to determine the affine
+    # matrix are different depending on whether the DICOM file is enhanced or
+    # in legacy format. Recall that most of contemporary DICOM files are still
+    # (CT > Enhanced CT), but some are always enhanced, such as DBT.
+    h0 = headers[0]
+    if "PerFrameFunctionalGroupsSequence" not in h0:
+        iop = h0.get("ImageOrientationPatient", None)
+        if iop is None:
+            iop = _decode_inplane_direction(headers, default_ornt=default_ornt)
+
+        in_plane_pixel_spacing = h0.get("PixelSpacing", None)
+        if in_plane_pixel_spacing is None:
+            in_plane_pixel_spacing = h0.get("ImagerPixelSpacing", None)
+
+        ipp0 = h0.get("ImagePositionPatient", None)
+        ipp1 = headers[1].get("ImagePositionPatient", None) if len(headers) > 1 else None
+        slice_thickness = h0.get("SliceThickness", None)
+        slice_spacing = h0.get("SpacingBetweenSlices", None)
+    else:
+        iop = _get_enhanced_attr(h0, ["PlaneOrientationSequence", "ImageOrientationPatient"])
+        in_plane_pixel_spacing = _get_enhanced_attr(h0, ["PixelMeasuresSequence", "PixelSpacing"])
+        ipp0 = _get_enhanced_attr(h0, ["PlanePositionSequence", "ImagePositionPatient"], idx=0)
+        ipp1 = _get_enhanced_attr(h0, ["PlanePositionSequence", "ImagePositionPatient"], idx=1)
+        slice_thickness = _get_enhanced_attr(h0, ["PixelMeasuresSequence", "SliceThickness"]) / len(
+            h0.PerFrameFunctionalGroupsSequence
+        )
+        slice_spacing = _get_enhanced_attr(h0, ["PixelMeasuresSequence", "SpacingBetweenSlices"])
+
+    # Fallbacks
+    if iop is None:
+        iop = [1, 0, 0, 0, 1, 0]
+        warnings.warn("Could not determine direction cosines, using LPS+ as a fallback.")
+
+    if in_plane_pixel_spacing is None:
+        in_plane_pixel_spacing = [1, 1]
+        warnings.warn("Could not determine in-plane pixel spacing, using [1, 1] as a fallback.")
+
+    if ipp0 is None:
+        ipp0 = [0, 0, 0]
+        warnings.warn("Could not determine image position, using [0, 0, 0] as a fallback.")
 
     orientation = np.zeros([3, 3])
 
     # Determine vector for in-plane pixel directions (i, j).
-    i_vec, j_vec = (
-        np.asarray(im_dir[:3]).astype(np.float64),
-        np.asarray(im_dir[3:]).astype(np.float64),
-    )  # unique to pydicom, please revise if using different library to load dicoms
+    i_vec, j_vec = np.asarray(iop[:3]).astype(np.float64), np.asarray(iop[3:]).astype(np.float64)
     i_vec, j_vec = (
         np.round(i_vec, vx.config.affine_precision),
         np.round(j_vec, vx.config.affine_precision),
@@ -383,23 +406,24 @@ def to_RAS_affine(headers: List[pydicom.FileDataset], default_ornt: Tuple[str, s
     # This is the preferred method to determine the k vector.
     # If single header, take cross product between i/j vectors.
     # These actions are done to avoid rounding errors that might result from float subtraction.
-    if len(headers) > 1:
-        k_vec = np.asarray(headers[1].ImagePositionPatient).astype(np.float64) - np.asarray(
-            headers[0].ImagePositionPatient
-        ).astype(np.float64)
+    if ipp1 is not None and ipp1 != ipp0:
+        k_vec = np.asarray(ipp1).astype(np.float64) - np.asarray(ipp0).astype(np.float64)
     else:
-        slice_thickness = headers[0].get("SliceThickness", 1.0)
+        if slice_thickness is None:
+            slice_thickness = 1.0
+            warnings.warn("Could not determine slice thickness, using 1.0 as a fallback.")
+
         i_norm = 1 / np.linalg.norm(i_vec) * i_vec
         j_norm = 1 / np.linalg.norm(j_vec) * j_vec
         k_norm = np.cross(i_norm, j_norm)
         k_vec = k_norm / np.linalg.norm(k_norm) * slice_thickness
-        if hasattr(headers[0], "SpacingBetweenSlices") and headers[0].SpacingBetweenSlices < 0:
+        if isinstance(slice_spacing, (int, float)) and slice_spacing < 0:
             k_vec *= -1
+
     k_vec = np.round(k_vec, vx.config.affine_precision)
 
     orientation[:3, :3] = np.stack([j_vec, i_vec, k_vec], axis=1)
-    scanner_origin = headers[0].get("ImagePositionPatient", np.zeros((3,)))
-    scanner_origin = np.asarray(scanner_origin).astype(np.float64)
+    scanner_origin = np.asarray(ipp0).astype(np.float64)
     scanner_origin = np.round(scanner_origin, vx.config.affine_precision)
 
     affine = np.zeros([4, 4])
@@ -448,3 +472,37 @@ def _decode_inplane_direction(headers: Sequence[pydicom.FileDataset], default_or
         return np.concatenate([affine[:3, 0], affine[:3, 1]], axis=0)
 
     return None
+
+
+def _unroll_dicom_attr(header, attr: List[pydicom.tag.TagType], idx: int = 0):
+    for a in attr[:-1]:
+        if a not in header:
+            return None
+
+        if isinstance(header[a], pydicom.sequence.Sequence):
+            if a == pydicom.tag.Tag("PerFrameFunctionalGroupsSequence"):
+                header = header[a][idx]
+            else:
+                header = header[a][0]
+
+        return _unroll_dicom_attr(header[a][0], attr[1:])
+
+    value = header.get(attr[-1], None)
+    if isinstance(value, pydicom.DataElement):
+        value = value.value
+
+    return value
+
+
+def _get_enhanced_attr(header, attr: List[pydicom.tag.TagType], idx: int = 0):
+    """Get attribute value from enhanced dicom header.
+
+    Returns:
+        Any: Attribute value.
+    """
+
+    frame = _unroll_dicom_attr(header, ["PerFrameFunctionalGroupsSequence", *attr], idx)
+    if frame is not None:
+        return frame
+
+    return _unroll_dicom_attr(header, ["SharedFunctionalGroupsSequence", *attr], idx)

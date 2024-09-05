@@ -94,7 +94,7 @@ def requires_packages(*packages):
 
     def _decorator(func):
         def _wrapper(*args, **kwargs):
-            if all([env.package_available(x) for x in packages]):
+            if all(env.package_available(x) for x in packages):
                 func(*args, **kwargs)
 
         return _wrapper
