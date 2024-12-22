@@ -3,7 +3,7 @@ numpy
 natsort
 nibabel
 packaging
-pydicom>=1.6.0
+pydicom==2.4.4
 PyYAML>=5.4.1
 requests
 tabulate
