@@ -347,7 +347,7 @@ class TestMedicalVolume(unittest.TestCase):
         )
         assert mv2.is_identical(mv)
 
-    @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
+    @unittest.skipIf(not ututils.is_data_available("qdess"), "unittest data is not available")
     def test_to_from_sitk_dicom_convention(self):
         dp = ututils.get_scan_dirpath("qdess")
         dirpath = ututils.get_read_paths(dp, ImageDataFormat.dicom)[0]

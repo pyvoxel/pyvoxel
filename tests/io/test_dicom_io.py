@@ -237,7 +237,7 @@ class TestDicomIO(ututils.TempPathMixin):
                         h1, h2
                     ), "headers for echoes %d must be equivalent" % (ind + 1)
 
-    @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
+    @unittest.skipIf(not ututils.is_data_available("qdess"), "unittest data is not available")
     def test_dicom_writer_nd(self):
         """Test writing dicoms for >3D MedicalVolume data."""
         dicom_path = ututils.get_dicoms_path(ututils.get_scan_dirpath("qdess"))
@@ -399,7 +399,7 @@ class TestDicomIO(ututils.TempPathMixin):
             instance_numbers = [h.InstanceNumber for h in v.headers(flatten=True)]
             assert instance_numbers == sorted(instance_numbers)
 
-    @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
+    @unittest.skipIf(not ututils.is_data_available("qdess"), "unittest data is not available")
     def test_write_sort_by(self):
         """Test sorting by dicom attributes before writing."""
         dp = ututils.get_scan_dirpath("qdess")
@@ -421,7 +421,7 @@ class TestDicomIO(ututils.TempPathMixin):
         assert e1.is_identical(vols[0])
         assert e2.is_identical(vols[1])
 
-    @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
+    @unittest.skipIf(not ututils.is_data_available("qdess"), "unittest data is not available")
     def test_load_no_group_by(self):
         """Test reading dicoms without group_by."""
         dp = ututils.get_scan_dirpath("qdess")
@@ -434,7 +434,7 @@ class TestDicomIO(ututils.TempPathMixin):
 
         assert e1.is_identical(e1_expected)
 
-    @unittest.skipIf(not ututils.is_data_available(), "unittest data is not available")
+    @unittest.skipIf(not ututils.is_data_available("qdess"), "unittest data is not available")
     def test_init_params(self):
         """Test reading/writing works with passing values to constructor."""
         dp = ututils.get_scan_dirpath("qdess")
