@@ -140,8 +140,8 @@ class DicomReader(DataReader):
         assert isinstance(include, tuple)
         assert isinstance(exclude, tuple)
         if ignore_hidden:
-            exclude += ("^\.",)  # noqa: W605
-
+            exclude += (r"^\.",)  # noqa: W605
+            
         possible_files = os.listdir(path)
         lst_files_dicom = []
         for f in possible_files:
