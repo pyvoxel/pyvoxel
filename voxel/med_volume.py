@@ -1739,24 +1739,29 @@ class MedicalVolume(NDArrayOperatorsMixin):
         # Parse the relevant headers
         spacing = clone.pixel_spacing[::-1]
 
-        ri = clone.get_metadata("RescaleIntercept", default=0)
-        if isinstance(ri, pydicom.multival.MultiValue):
-            ri = ri[0]
+        # Rescale intercept and slope
+        ri, rs = 0, 1
+        if clone._headers is not None:
+            ri = clone.get_metadata("RescaleIntercept", default=0)
+            if isinstance(ri, pydicom.multival.MultiValue):
+                ri = ri[0]
 
-        rs = clone.get_metadata("RescaleSlope", default=1)
-        if isinstance(rs, pydicom.multival.MultiValue):
-            rs = rs[0]
-
+            rs = clone.get_metadata("RescaleSlope", default=1)
+            if isinstance(rs, pydicom.multival.MultiValue):
+                rs = rs[0]
+        
+        # Window width and center
         ma, mi = np.amax(clone._volume) * rs + ri, np.amin(clone._volume) * rs + ri
         dynamic_range = ma - mi
+        ww, wc = dynamic_range, dynamic_range / 2 + mi
+        if clone._headers is not None:
+            ww = clone.get_metadata("WindowWidth", default=dynamic_range)
+            if isinstance(ww, pydicom.multival.MultiValue):
+                ww = ww[0]
 
-        ww = clone.get_metadata("WindowWidth", default=dynamic_range)
-        if isinstance(ww, pydicom.multival.MultiValue):
-            ww = ww[0]
-
-        wc = clone.get_metadata("WindowCenter", default=dynamic_range / 2 + mi)
-        if isinstance(wc, pydicom.multival.MultiValue):
-            wc = wc[0]
+            wc = clone.get_metadata("WindowCenter", default=dynamic_range / 2 + mi)
+            if isinstance(wc, pydicom.multival.MultiValue):
+                wc = wc[0]
 
         # Display the volume
         x = np.ascontiguousarray(clone._volume)

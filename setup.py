@@ -102,6 +102,7 @@ REQUIRED = [
     "tabulate",
     "termcolor",
     "tqdm>=4.42.0",
+    'ipywidgets>=7.0.0', # Specify a minimum version if known
 ]
 
 # Optional packages.
